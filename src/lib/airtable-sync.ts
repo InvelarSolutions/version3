@@ -27,8 +27,26 @@ interface SyncStats {
   totalSyncs: number;
   successfulSyncs: number;
   failedSyncs: number;
-  lastSyncTime: string | null;
+  totalRecordsSynced: number;
+  lastSyncAt: string | undefined;
   recentLogs: SyncLog[];
+}
+
+interface SyncConfig {
+  realtime_sync_enabled: boolean;
+  scheduled_sync_enabled: boolean;
+  sync_batch_size: number;
+  sync_rate_limit_ms: number;
+  max_retry_attempts: number;
+  log_retention_days: number;
+}
+
+interface SyncHealthStatus {
+  status: 'healthy' | 'warning' | 'critical';
+  recent_failures: number;
+  stuck_syncs: number;
+  last_successful_sync: string | null;
+  check_timestamp: string;
 }
 
 class AirtableSyncService {
@@ -39,7 +57,7 @@ class AirtableSyncService {
     this.baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/airtable-sync`;
   }
 
-  private async makeEdgeFunctionRequest(endpoint: string, options: RequestInit = {}) {
+  private async makeEdgeFunctionRequest(endpoint: string = '', options: RequestInit = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
@@ -104,7 +122,8 @@ class AirtableSyncService {
       const totalSyncs = syncLogs?.length || 0;
       const successfulSyncs = syncLogs?.filter(log => log.status === 'completed').length || 0;
       const failedSyncs = syncLogs?.filter(log => log.status === 'failed').length || 0;
-      const lastSyncTime = syncLogs?.[0]?.completed_at || null;
+      const totalRecordsSynced = syncLogs?.reduce((sum, log) => sum + (log.records_synced || 0), 0) || 0;
+      const lastSyncAt = syncLogs?.[0]?.completed_at;
       const recentLogs = syncLogs?.slice(0, 10) || [];
 
       return {
@@ -112,7 +131,8 @@ class AirtableSyncService {
         totalSyncs,
         successfulSyncs,
         failedSyncs,
-        lastSyncTime,
+        totalRecordsSynced,
+        lastSyncAt,
         recentLogs,
       };
     } catch (error) {
@@ -120,19 +140,121 @@ class AirtableSyncService {
     }
   }
 
+  async getSyncConfig(): Promise<SyncConfig> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { data, error } = await supabase
+      .from('sync_config')
+      .select('config_key, config_value');
+
+    if (error) {
+      throw new Error(`Failed to fetch sync config: ${error.message}`);
+    }
+
+    // Convert array to object with default values
+    const config: SyncConfig = {
+      realtime_sync_enabled: true,
+      scheduled_sync_enabled: true,
+      sync_batch_size: 10,
+      sync_rate_limit_ms: 200,
+      max_retry_attempts: 3,
+      log_retention_days: 30,
+    };
+
+    data?.forEach(item => {
+      const key = item.config_key as keyof SyncConfig;
+      if (key in config) {
+        const value = item.config_value;
+        if (typeof value === 'boolean') {
+          (config as any)[key] = value;
+        } else if (typeof value === 'number') {
+          (config as any)[key] = value;
+        } else if (typeof value === 'string') {
+          // Handle string values that should be parsed
+          if (key.includes('enabled')) {
+            (config as any)[key] = value === 'true';
+          } else {
+            (config as any)[key] = parseInt(value) || (config as any)[key];
+          }
+        }
+      }
+    });
+
+    return config;
+  }
+
+  async updateSyncConfig(key: keyof SyncConfig, value: any): Promise<boolean> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { error } = await supabase
+      .from('sync_config')
+      .upsert({
+        config_key: key,
+        config_value: value,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) {
+      throw new Error(`Failed to update sync config: ${error.message}`);
+    }
+
+    return true;
+  }
+
+  async getSyncHealthStatus(): Promise<SyncHealthStatus> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { data, error } = await supabase
+      .rpc('sync_health_check');
+
+    if (error) {
+      throw new Error(`Failed to get sync health status: ${error.message}`);
+    }
+
+    return data;
+  }
+
   async triggerManualSync(): Promise<SyncResult> {
     try {
-      const result = await this.makeEdgeFunctionRequest('/sync', {
+      const result = await this.makeEdgeFunctionRequest('?type=manual', {
         method: 'POST',
-        body: JSON.stringify({ type: 'manual' }),
       });
 
       return {
-        ...result,
-        lastSyncTime: new Date(result.lastSyncTime),
+        success: result.success,
+        recordsProcessed: result.records_processed || 0,
+        recordsSynced: result.records_synced || 0,
+        recordsFailed: result.records_failed || 0,
+        errors: result.errors || [],
+        lastSyncTime: new Date(),
       };
     } catch (error) {
       throw new Error(`Manual sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async triggerScheduledSync(): Promise<SyncResult> {
+    try {
+      const result = await this.makeEdgeFunctionRequest('?type=scheduled', {
+        method: 'POST',
+      });
+
+      return {
+        success: result.success,
+        recordsProcessed: result.records_processed || 0,
+        recordsSynced: result.records_synced || 0,
+        recordsFailed: result.records_failed || 0,
+        errors: result.errors || [],
+        lastSyncTime: new Date(),
+      };
+    } catch (error) {
+      throw new Error(`Scheduled sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -150,6 +272,54 @@ class AirtableSyncService {
       };
     }
   }
+
+  async cleanupOldLogs(): Promise<{ deleted: number }> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { data, error } = await supabase
+      .rpc('cleanup_sync_logs');
+
+    if (error) {
+      throw new Error(`Failed to cleanup logs: ${error.message}`);
+    }
+
+    return { deleted: data || 0 };
+  }
+
+  async resetSyncState(): Promise<{ reset_syncs: number }> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { data, error } = await supabase
+      .rpc('reset_sync_state');
+
+    if (error) {
+      throw new Error(`Failed to reset sync state: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  async getSyncStatistics(): Promise<any> {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    const { data, error } = await supabase
+      .from('sync_statistics')
+      .select('statistics')
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to fetch sync statistics: ${error.message}`);
+    }
+
+    return data?.statistics || {};
+  }
 }
 
 export const airtableSyncService = new AirtableSyncService();
+export type { SyncLog, SyncStats, SyncConfig, SyncHealthStatus, SyncResult };

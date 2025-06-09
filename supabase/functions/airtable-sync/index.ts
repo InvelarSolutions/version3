@@ -20,6 +20,7 @@ interface ContactSubmission {
 }
 
 interface AirtableRecord {
+  id?: string
   fields: {
     'Submission ID': string
     'First Name': string
@@ -32,6 +33,7 @@ interface AirtableRecord {
     'Newsletter Subscription': boolean
     'Created At': string
     'Synced At': string
+    'Last Updated': string
   }
 }
 
@@ -51,12 +53,14 @@ class AirtableSync {
   private airtableApiKey: string
   private airtableBaseId: string
   private airtableTableId: string
+  private airtableViewId: string
   private supabase: any
 
   constructor() {
-    this.airtableApiKey = Deno.env.get('AIRTABLE_API_KEY') || ''
+    this.airtableApiKey = Deno.env.get('AIRTABLE_API_KEY') || 'patXUDooi13mZ5UK0'
     this.airtableBaseId = 'appOjOMHTayU1oZLJ'
     this.airtableTableId = 'tblhpwqJMeAIETi1v'
+    this.airtableViewId = 'viwEO6AvLQ641myYg'
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -64,13 +68,19 @@ class AirtableSync {
     this.supabase = createClient(supabaseUrl, supabaseServiceKey)
   }
 
-  async logSync(log: SyncLog): Promise<void> {
+  async logSync(log: SyncLog): Promise<string | null> {
     try {
-      await this.supabase
+      const { data, error } = await this.supabase
         .from('sync_logs')
         .insert([log])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data?.id || null
     } catch (error) {
       console.error('Failed to log sync:', error)
+      return null
     }
   }
 
@@ -102,8 +112,8 @@ class AirtableSync {
     }
   }
 
-  async getExistingAirtableRecords(): Promise<Set<string>> {
-    const existingIds = new Set<string>()
+  async getExistingAirtableRecords(): Promise<Map<string, string>> {
+    const existingRecords = new Map<string, string>() // submissionId -> airtableRecordId
     let offset = ''
 
     try {
@@ -125,7 +135,7 @@ class AirtableSync {
         
         data.records?.forEach((record: any) => {
           if (record.fields['Submission ID']) {
-            existingIds.add(record.fields['Submission ID'])
+            existingRecords.set(record.fields['Submission ID'], record.id)
           }
         })
 
@@ -137,25 +147,22 @@ class AirtableSync {
       throw error
     }
 
-    return existingIds
+    return existingRecords
   }
 
-  async syncToAirtable(records: ContactSubmission[], existingIds: Set<string>): Promise<{ synced: number, failed: number, errors: string[] }> {
+  async createAirtableRecords(records: ContactSubmission[]): Promise<{ synced: number, failed: number, errors: string[] }> {
     const errors: string[] = []
     let synced = 0
     let failed = 0
 
-    // Filter out records that already exist in Airtable
-    const newRecords = records.filter(record => !existingIds.has(record.id))
-
-    if (newRecords.length === 0) {
+    if (records.length === 0) {
       return { synced: 0, failed: 0, errors: [] }
     }
 
     // Process records in batches of 10 (Airtable limit)
     const batchSize = 10
-    for (let i = 0; i < newRecords.length; i += batchSize) {
-      const batch = newRecords.slice(i, i + batchSize)
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize)
       
       try {
         const airtableRecords: AirtableRecord[] = batch.map(record => ({
@@ -170,7 +177,8 @@ class AirtableSync {
             'Additional Notes': record.additional_notes || '',
             'Newsletter Subscription': record.newsletter_subscription,
             'Created At': record.created_at,
-            'Synced At': new Date().toISOString()
+            'Synced At': new Date().toISOString(),
+            'Last Updated': new Date().toISOString()
           }
         }))
 
@@ -199,7 +207,7 @@ class AirtableSync {
       }
 
       // Rate limiting: wait 200ms between batches
-      if (i + batchSize < newRecords.length) {
+      if (i + batchSize < records.length) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
     }
@@ -207,91 +215,256 @@ class AirtableSync {
     return { synced, failed, errors }
   }
 
-  async performSync(syncType: 'manual' | 'scheduled' | 'realtime', recordId?: string): Promise<any> {
+  async updateAirtableRecords(records: ContactSubmission[], existingRecords: Map<string, string>): Promise<{ synced: number, failed: number, errors: string[] }> {
+    const errors: string[] = []
+    let synced = 0
+    let failed = 0
+
+    const recordsToUpdate = records.filter(record => existingRecords.has(record.id))
+
+    if (recordsToUpdate.length === 0) {
+      return { synced: 0, failed: 0, errors: [] }
+    }
+
+    // Process records in batches of 10 (Airtable limit)
+    const batchSize = 10
+    for (let i = 0; i < recordsToUpdate.length; i += batchSize) {
+      const batch = recordsToUpdate.slice(i, i + batchSize)
+      
+      try {
+        const airtableRecords = batch.map(record => ({
+          id: existingRecords.get(record.id)!,
+          fields: {
+            'Submission ID': record.id,
+            'First Name': record.first_name,
+            'Last Name': record.last_name,
+            'Email': record.email,
+            'Phone': record.phone,
+            'Company Name': record.company_name || '',
+            'Industry': record.industry || '',
+            'Additional Notes': record.additional_notes || '',
+            'Newsletter Subscription': record.newsletter_subscription,
+            'Created At': record.created_at,
+            'Last Updated': new Date().toISOString()
+          }
+        }))
+
+        const response = await fetch(`https://api.airtable.com/v0/${this.airtableBaseId}/${this.airtableTableId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${this.airtableApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ records: airtableRecords })
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Airtable API error: ${response.status} ${response.statusText} - ${errorText}`)
+        }
+
+        const result = await response.json()
+        synced += result.records?.length || 0
+
+      } catch (error) {
+        const errorMessage = `Update batch ${Math.floor(i / batchSize) + 1} failed: ${error.message}`
+        errors.push(errorMessage)
+        failed += batch.length
+        console.error(errorMessage)
+      }
+
+      // Rate limiting: wait 200ms between batches
+      if (i + batchSize < recordsToUpdate.length) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+
+    return { synced, failed, errors }
+  }
+
+  async deleteAirtableRecords(recordIds: string[]): Promise<{ deleted: number, failed: number, errors: string[] }> {
+    const errors: string[] = []
+    let deleted = 0
+    let failed = 0
+
+    if (recordIds.length === 0) {
+      return { deleted: 0, failed: 0, errors: [] }
+    }
+
+    // Process records in batches of 10 (Airtable limit)
+    const batchSize = 10
+    for (let i = 0; i < recordIds.length; i += batchSize) {
+      const batch = recordIds.slice(i, i + batchSize)
+      
+      try {
+        const deleteUrl = `https://api.airtable.com/v0/${this.airtableBaseId}/${this.airtableTableId}?${batch.map(id => `records[]=${id}`).join('&')}`
+
+        const response = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${this.airtableApiKey}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Airtable API error: ${response.status} ${response.statusText} - ${errorText}`)
+        }
+
+        const result = await response.json()
+        deleted += result.records?.length || 0
+
+      } catch (error) {
+        const errorMessage = `Delete batch ${Math.floor(i / batchSize) + 1} failed: ${error.message}`
+        errors.push(errorMessage)
+        failed += batch.length
+        console.error(errorMessage)
+      }
+
+      // Rate limiting: wait 200ms between batches
+      if (i + batchSize < recordIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+
+    return { deleted, failed, errors }
+  }
+
+  async performSync(syncType: 'manual' | 'scheduled' | 'realtime', recordId?: string, operation?: 'INSERT' | 'UPDATE' | 'DELETE'): Promise<any> {
     const startTime = new Date().toISOString()
     
     // Create initial sync log
-    const { data: logData } = await this.supabase
-      .from('sync_logs')
-      .insert([{
-        sync_type: syncType,
-        records_processed: 0,
-        records_synced: 0,
-        records_failed: 0,
-        started_at: startTime,
-        status: 'running'
-      }])
-      .select()
-      .single()
-
-    const logId = logData?.id
+    const logId = await this.logSync({
+      sync_type: syncType,
+      records_processed: 0,
+      records_synced: 0,
+      records_failed: 0,
+      started_at: startTime,
+      status: 'running'
+    })
 
     try {
-      let query = this.supabase
-        .from('contact_submissions')
-        .select('*')
-        .order('created_at', { ascending: true })
+      let records: ContactSubmission[] = []
+      let totalProcessed = 0
+      let totalSynced = 0
+      let totalFailed = 0
+      const allErrors: string[] = []
 
-      // For real-time sync, only sync the specific record
+      // Get existing Airtable records for comparison
+      const existingRecords = await this.getExistingAirtableRecords()
+
       if (syncType === 'realtime' && recordId) {
-        query = query.eq('id', recordId)
-      } else if (syncType === 'scheduled') {
-        // For scheduled sync, only sync records created since last successful sync
-        const lastSync = await this.getLastSyncTimestamp()
-        if (lastSync) {
-          query = query.gt('created_at', lastSync)
+        // Real-time sync for specific record
+        if (operation === 'DELETE') {
+          // Handle deletion
+          const airtableRecordId = existingRecords.get(recordId)
+          if (airtableRecordId) {
+            const { deleted, failed, errors } = await this.deleteAirtableRecords([airtableRecordId])
+            totalProcessed = 1
+            totalSynced = deleted
+            totalFailed = failed
+            allErrors.push(...errors)
+          }
+        } else {
+          // Handle INSERT or UPDATE
+          const { data: record, error } = await this.supabase
+            .from('contact_submissions')
+            .select('*')
+            .eq('id', recordId)
+            .single()
+
+          if (error) {
+            throw new Error(`Failed to fetch record from Supabase: ${error.message}`)
+          }
+
+          if (record) {
+            records = [record]
+            totalProcessed = 1
+
+            if (existingRecords.has(recordId)) {
+              // Update existing record
+              const { synced, failed, errors } = await this.updateAirtableRecords(records, existingRecords)
+              totalSynced = synced
+              totalFailed = failed
+              allErrors.push(...errors)
+            } else {
+              // Create new record
+              const { synced, failed, errors } = await this.createAirtableRecords(records)
+              totalSynced = synced
+              totalFailed = failed
+              allErrors.push(...errors)
+            }
+          }
+        }
+      } else {
+        // Full sync or scheduled sync
+        let query = this.supabase
+          .from('contact_submissions')
+          .select('*')
+          .order('created_at', { ascending: true })
+
+        if (syncType === 'scheduled') {
+          // For scheduled sync, only sync records created/updated since last successful sync
+          const lastSync = await this.getLastSyncTimestamp()
+          if (lastSync) {
+            query = query.gt('created_at', lastSync)
+          }
+        }
+
+        const { data: allRecords, error } = await query
+
+        if (error) {
+          throw new Error(`Failed to fetch records from Supabase: ${error.message}`)
+        }
+
+        records = allRecords || []
+        totalProcessed = records.length
+
+        if (records.length > 0) {
+          // Separate new records from existing ones
+          const newRecords = records.filter(record => !existingRecords.has(record.id))
+          const existingRecordsToUpdate = records.filter(record => existingRecords.has(record.id))
+
+          // Create new records
+          if (newRecords.length > 0) {
+            const { synced, failed, errors } = await this.createAirtableRecords(newRecords)
+            totalSynced += synced
+            totalFailed += failed
+            allErrors.push(...errors)
+          }
+
+          // Update existing records
+          if (existingRecordsToUpdate.length > 0) {
+            const { synced, failed, errors } = await this.updateAirtableRecords(existingRecordsToUpdate, existingRecords)
+            totalSynced += synced
+            totalFailed += failed
+            allErrors.push(...errors)
+          }
         }
       }
-
-      const { data: records, error } = await query
-
-      if (error) {
-        throw new Error(`Failed to fetch records from Supabase: ${error.message}`)
-      }
-
-      if (!records || records.length === 0) {
-        await this.updateSyncLog(logId, {
-          records_processed: 0,
-          records_synced: 0,
-          records_failed: 0,
-          completed_at: new Date().toISOString(),
-          status: 'completed'
-        })
-
-        return {
-          success: true,
-          message: 'No new records to sync',
-          records_processed: 0,
-          records_synced: 0,
-          records_failed: 0
-        }
-      }
-
-      // Get existing Airtable records to avoid duplicates
-      const existingIds = await this.getExistingAirtableRecords()
-
-      // Sync to Airtable
-      const { synced, failed, errors } = await this.syncToAirtable(records, existingIds)
 
       const completedAt = new Date().toISOString()
 
       // Update sync log
-      await this.updateSyncLog(logId, {
-        records_processed: records.length,
-        records_synced: synced,
-        records_failed: failed,
-        errors: errors.length > 0 ? errors : undefined,
-        completed_at: completedAt,
-        status: failed > 0 ? 'failed' : 'completed'
-      })
+      if (logId) {
+        await this.updateSyncLog(logId, {
+          records_processed: totalProcessed,
+          records_synced: totalSynced,
+          records_failed: totalFailed,
+          errors: allErrors.length > 0 ? allErrors : undefined,
+          completed_at: completedAt,
+          status: totalFailed > 0 ? 'failed' : 'completed'
+        })
+      }
 
       return {
         success: true,
-        message: `Sync completed: ${synced} records synced, ${failed} failed`,
-        records_processed: records.length,
-        records_synced: synced,
-        records_failed: failed,
-        errors: errors.length > 0 ? errors : undefined
+        message: `Sync completed: ${totalSynced} records synced, ${totalFailed} failed`,
+        records_processed: totalProcessed,
+        records_synced: totalSynced,
+        records_failed: totalFailed,
+        errors: allErrors.length > 0 ? allErrors : undefined
       }
 
     } catch (error) {
@@ -311,6 +484,32 @@ class AirtableSync {
       }
     }
   }
+
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      // Test Airtable API connection
+      const response = await fetch(`https://api.airtable.com/v0/${this.airtableBaseId}/${this.airtableTableId}?maxRecords=1`, {
+        headers: {
+          'Authorization': `Bearer ${this.airtableApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Airtable API error: ${response.status} ${response.statusText}`)
+      }
+
+      return {
+        success: true,
+        message: 'Airtable connection successful'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Connection failed: ${error.message}`
+      }
+    }
+  }
 }
 
 serve(async (req) => {
@@ -323,6 +522,21 @@ serve(async (req) => {
     const url = new URL(req.url)
     const syncType = url.searchParams.get('type') || 'manual'
     const recordId = url.searchParams.get('recordId')
+    const operation = url.searchParams.get('operation') as 'INSERT' | 'UPDATE' | 'DELETE' | null
+
+    // Handle test endpoint
+    if (url.pathname.endsWith('/test')) {
+      const airtableSync = new AirtableSync()
+      const result = await airtableSync.testConnection()
+      
+      return new Response(
+        JSON.stringify(result),
+        { 
+          status: result.success ? 200 : 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
 
     if (!['manual', 'scheduled', 'realtime'].includes(syncType)) {
       return new Response(
@@ -335,7 +549,11 @@ serve(async (req) => {
     }
 
     const airtableSync = new AirtableSync()
-    const result = await airtableSync.performSync(syncType as any, recordId || undefined)
+    const result = await airtableSync.performSync(
+      syncType as any, 
+      recordId || undefined,
+      operation || undefined
+    )
 
     return new Response(
       JSON.stringify(result),
