@@ -24,4 +24,57 @@ try {
   console.error('❌ Error creating Supabase client:', error)
 }
 
+// Contact service for handling contact form submissions
+export const contactService = {
+  async createContactSubmission(data: Database['public']['Tables']['contact_submissions']['Insert']) {
+    if (!supabase) {
+      throw new Error('Supabase client is not initialized')
+    }
+    
+    const { data: result, error } = await supabase
+      .from('contact_submissions')
+      .insert(data)
+      .select()
+      .single()
+    
+    if (error) {
+      throw error
+    }
+    
+    return result
+  },
+
+  async testConnection() {
+    if (!supabase) {
+      return { success: false, error: 'Supabase client is not initialized' }
+    }
+    
+    try {
+      const { error } = await supabase.from('contact_submissions').select('count').limit(1)
+      if (error) {
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  },
+
+  async getContactSubmissionStats() {
+    if (!supabase) {
+      throw new Error('Supabase client is not initialized')
+    }
+    
+    const { count, error } = await supabase
+      .from('contact_submissions')
+      .select('*', { count: 'exact', head: true })
+    
+    if (error) {
+      throw error
+    }
+    
+    return { total: count || 0 }
+  }
+}
+
 export { supabase }
