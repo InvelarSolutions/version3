@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Database, Settings, Activity, TestTube } from 'lucide-react';
+import { ArrowLeft, Database, Settings, Activity, TestTube, Wrench } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { DatabaseStatus } from '@/components/DatabaseStatus';
 import { AirtableSyncDashboard } from '@/components/AirtableSyncDashboard';
 import { AirtableSyncTest } from '@/components/AirtableSyncTest';
+import { AirtableSyncTroubleshooter } from '@/components/AirtableSyncTroubleshooter';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'database' | 'sync' | 'test' | 'settings'>('test');
+  const [activeTab, setActiveTab] = useState<'troubleshoot' | 'database' | 'sync' | 'test' | 'settings'>('troubleshoot');
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white">
@@ -52,6 +53,17 @@ export default function AdminPage() {
 
           {/* Navigation Tabs */}
           <div className="flex space-x-1 mb-8 bg-[#2a2a2a] rounded-lg p-1 w-fit">
+            <button
+              onClick={() => setActiveTab('troubleshoot')}
+              className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
+                activeTab === 'troubleshoot'
+                  ? 'bg-white text-black'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Wrench className="h-4 w-4 mr-2 inline" />
+              Troubleshoot
+            </button>
             <button
               onClick={() => setActiveTab('test')}
               className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
@@ -100,6 +112,12 @@ export default function AdminPage() {
 
           {/* Tab Content */}
           <div className="space-y-6">
+            {activeTab === 'troubleshoot' && (
+              <div>
+                <AirtableSyncTroubleshooter />
+              </div>
+            )}
+
             {activeTab === 'test' && (
               <div>
                 <AirtableSyncTest />
