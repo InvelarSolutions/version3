@@ -14,8 +14,8 @@ class AirtableService {
   private apiEndpoint: string;
 
   constructor() {
-    // Use Netlify Functions endpoint
-    this.apiEndpoint = '/.netlify/functions/airtable';
+    // Use public API endpoint that redirects to Netlify Functions
+    this.apiEndpoint = '/api/airtable';
   }
 
   private validateFormData(data: ContactFormData): void {
@@ -113,7 +113,7 @@ class AirtableService {
 
   async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
-      const response = await fetch(`/.netlify/functions/airtable-test`, {
+      const response = await fetch(`/api/airtable/test`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
