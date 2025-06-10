@@ -151,17 +151,12 @@ export default function HomePage() {
   const [showPhoneBubble, setShowPhoneBubble] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
-  const [isVoiceflowChatOpen, setIsVoiceflowChatOpen] = useState(false);
-  const [voiceflowLoaded, setVoiceflowLoaded] = useState(false);
-  const [voiceflowError, setVoiceflowError] = useState(false);
   const [screenDimensions, setScreenDimensions] = useState({ width: 1920, height: 1080 }); // Default server-safe values
   
   const emailBubbleRef = useRef<HTMLDivElement>(null);
   const mailButtonRef = useRef<HTMLButtonElement>(null);
   const phoneBubbleRef = useRef<HTMLDivElement>(null);
   const phoneButtonRef = useRef<HTMLButtonElement>(null);
-  const voiceflowWidget = useRef<any>(null);
-  const voiceflowContainer = useRef<HTMLDivElement>(null);
 
   // Set screen dimensions after component mounts on client side
   useEffect(() => {
@@ -177,107 +172,6 @@ export default function HomePage() {
     
     return () => window.removeEventListener('resize', updateScreenDimensions);
   }, []);
-
-  // Initialize Voiceflow chat widget with error handling
-  useEffect(() => {
-    // Create a separate container for Voiceflow outside of React's control
-    const voiceflowDiv = document.createElement('div');
-    voiceflowDiv.id = 'voiceflow-chat-root';
-    voiceflowDiv.style.cssText = `
-      position: fixed;
-      right: 1rem;
-      bottom: 1rem;
-      z-index: 50;
-      width: 400px;
-      height: 600px;
-      max-width: calc(100vw - 2rem);
-      max-height: calc(100vh - 2rem);
-      transition: all 0.3s ease-in-out;
-      opacity: 0;
-      transform: translateY(1rem);
-      pointer-events: none;
-    `;
-    
-    document.body.appendChild(voiceflowDiv);
-    voiceflowContainer.current = voiceflowDiv;
-
-    // Load Voiceflow script with error handling
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    
-    script.onload = function() {
-      try {
-        if (window.voiceflow) {
-          // Add timeout to prevent hanging
-          const loadTimeout = setTimeout(() => {
-            console.warn('Voiceflow widget load timeout');
-            setVoiceflowError(true);
-          }, 10000); // 10 second timeout
-
-          voiceflowWidget.current = window.voiceflow.chat.load({
-            verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
-            url: 'https://general-runtime.voiceflow.com',
-            versionID: 'production',
-            voice: {
-              url: "https://runtime-api.voiceflow.com"
-            },
-            render: {
-              mode: 'embedded',
-              target: voiceflowDiv
-            }
-          }).then(() => {
-            clearTimeout(loadTimeout);
-            setVoiceflowLoaded(true);
-            setVoiceflowError(false);
-          }).catch((error: any) => {
-            clearTimeout(loadTimeout);
-            console.error('Voiceflow widget failed to load:', error);
-            setVoiceflowError(true);
-            setVoiceflowLoaded(false);
-          });
-        } else {
-          setVoiceflowError(true);
-        }
-      } catch (error) {
-        console.error('Error initializing Voiceflow widget:', error);
-        setVoiceflowError(true);
-      }
-    };
-
-    script.onerror = function() {
-      console.error('Failed to load Voiceflow script');
-      setVoiceflowError(true);
-    };
-
-    script.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs";
-    
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup script and container on unmount
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-      if (voiceflowContainer.current && document.body.contains(voiceflowContainer.current)) {
-        document.body.removeChild(voiceflowContainer.current);
-      }
-    };
-  }, []);
-
-  // Control Voiceflow chat visibility
-  useEffect(() => {
-    if (voiceflowContainer.current && voiceflowLoaded && !voiceflowError) {
-      if (isVoiceflowChatOpen) {
-        voiceflowContainer.current.style.opacity = '1';
-        voiceflowContainer.current.style.transform = 'translateY(0)';
-        voiceflowContainer.current.style.pointerEvents = 'auto';
-      } else {
-        voiceflowContainer.current.style.opacity = '0';
-        voiceflowContainer.current.style.transform = 'translateY(1rem)';
-        voiceflowContainer.current.style.pointerEvents = 'none';
-      }
-    }
-  }, [isVoiceflowChatOpen, voiceflowLoaded, voiceflowError]);
 
   // Handle clicking outside email bubble
   useEffect(() => {
@@ -338,15 +232,6 @@ export default function HomePage() {
 
   const handleChatClick = () => {
     setIsChatbotOpen(true);
-  };
-
-  const handleVoiceflowChatClick = () => {
-    // If Voiceflow failed to load, fall back to the enhanced chatbot
-    if (voiceflowError || !voiceflowLoaded) {
-      setIsChatbotOpen(true);
-    } else {
-      setIsVoiceflowChatOpen(!isVoiceflowChatOpen);
-    }
   };
 
   const handleMailClick = () => {
@@ -537,7 +422,7 @@ export default function HomePage() {
           </button>
           <Button 
             id="chat-button"
-            onClick={handleVoiceflowChatClick}
+            onClick={handleChatClick}
             variant="outline"
             size="sm"
             className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 p-2"
@@ -589,7 +474,7 @@ export default function HomePage() {
                 Contact
               </button>
               <Button 
-                onClick={handleVoiceflowChatClick}
+                onClick={handleChatClick}
                 variant="outline"
                 size="sm"
                 className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 w-fit"
