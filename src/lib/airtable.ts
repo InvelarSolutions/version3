@@ -1,4 +1,16 @@
-// Airtable API integration using backend API endpoint
+// Direct Airtable API integration using field IDs
+interface AirtableRecord {
+  fields: Record<string, any>;
+}
+
+interface AirtableResponse {
+  records: Array<{
+    id: string;
+    fields: Record<string, any>;
+    createdTime: string;
+  }>;
+}
+
 interface ContactFormData {
   firstName: string;
   lastName: string;
@@ -10,12 +22,65 @@ interface ContactFormData {
   newsletterSubscription: boolean;
 }
 
+// Generate UUID v4
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Field mapping using actual Airtable field IDs
+const FIELD_IDS = {
+  firstName: 'fld2yAX1BepyzcYxb',           // First Name
+  lastName: 'fldnLyFGgejjoSTTd',            // Last Name
+  email: 'fldqtGtICn9VQSmyT',               // Email Address
+  phone: 'fldJkeLbcy9NtcBCY',               // Phone Number
+  currentStatus: 'fldFRzOgZvS5kNfex',       // Current Status
+  companyName: 'fldmdPJ6b8w9B45NF',         // Company Name
+  industry: 'fld6IS6IersuxaV1B',            // Industry Type
+  additionalNotes: 'fldWeqmLYt3MX1Wn5',     // Additional Notes
+  newsletterSubscription: 'fldbAeIOCdQQm7JzG', // Newsletter Subscription Status
+  creationTimestamp: 'fldtmLnCmbGEG8g5P',   // Creation Timestamp
+  syncTimestamp: 'fldQZqbSsfJkfUfiw',       // Sync Timestamp
+  lastUpdateTimestamp: 'fldlwObGh6kc1peJ4'  // Last Update Timestamp
+};
+
 class AirtableService {
-  private apiEndpoint: string;
+  private apiKey: string;
+  private baseId: string;
+  private tableId: string;
+  private baseUrl: string;
 
   constructor() {
-    // Use your backend API endpoint - you'll need to deploy this
-    this.apiEndpoint = '/api/airtable';
+    // You'll need to set this API key
+    this.apiKey = 'pathdCnsO2NWzZNnO.b282f93d07ef47a2cb0186d26ffd8ddbc780729e9397553cfd73624b32a5ade0';
+    this.baseId = 'appOjOMHTayU1oZLJ';
+    this.tableId = 'tblhpwqJMeAIETi1v';
+    this.baseUrl = `https://api.airtable.com/v0/${this.baseId}/${this.tableId}`;
+
+    if (!this.apiKey || this.apiKey === 'your_airtable_api_key') {
+      console.warn('Airtable API key not configured properly. Please update the API key in the AirtableService constructor.');
+    }
+  }
+
+  private validateApiKey(): boolean {
+    if (!this.apiKey || this.apiKey === 'your_airtable_api_key') {
+      throw new Error('Airtable API key is not configured. Please set the API key in the AirtableService constructor.');
+    }
+    return true;
+  }
+
+  private formatPhoneNumber(phone: string): string {
+    // Remove any non-digit characters except + and spaces
+    const cleaned = phone.replace(/[^\d\s\+\-\(\)]/g, '');
+    return cleaned.trim();
+  }
+
+  private validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   private validateFormData(data: ContactFormData): void {
@@ -44,61 +109,95 @@ class AirtableService {
     }
   }
 
-  private validateEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  private createRecord(data: ContactFormData): AirtableRecord {
+    const currentTimestamp = new Date().toISOString();
+    
+    const record: AirtableRecord = {
+      fields: {
+        // Required fields
+        [FIELD_IDS.firstName]: data.firstName.trim(),
+        [FIELD_IDS.lastName]: data.lastName.trim(),
+        [FIELD_IDS.email]: data.email.trim().toLowerCase(),
+        [FIELD_IDS.phone]: this.formatPhoneNumber(data.phone),
+        
+        // Set current status to indicate new submission
+        [FIELD_IDS.currentStatus]: 'New Submission',
+        
+        // Optional fields
+        [FIELD_IDS.companyName]: data.companyName?.trim() || '',
+        [FIELD_IDS.industry]: data.industry || '',
+        [FIELD_IDS.additionalNotes]: data.additionalNotes?.trim() || '',
+        [FIELD_IDS.newsletterSubscription]: data.newsletterSubscription || false,
+        
+        // Timestamps
+        [FIELD_IDS.creationTimestamp]: currentTimestamp,
+        [FIELD_IDS.syncTimestamp]: currentTimestamp,
+        [FIELD_IDS.lastUpdateTimestamp]: currentTimestamp
+      }
+    };
+
+    return record;
   }
 
   async submitContactForm(data: ContactFormData): Promise<{ success: boolean; recordId?: string; error?: string }> {
     try {
+      // Validate API configuration
+      this.validateApiKey();
+
       // Validate form data
       this.validateFormData(data);
 
-      console.log('📤 Submitting to Airtable via backend API');
+      // Prepare the record for Airtable using field IDs
+      const record = this.createRecord(data);
 
-      // Submit to your backend API endpoint
-      const response = await fetch(this.apiEndpoint, {
+      console.log('📤 Submitting directly to Airtable API');
+      console.log('📤 Record data:', record);
+
+      // Make the API request to Airtable
+      const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify({
-          firstName: data.firstName.trim(),
-          lastName: data.lastName.trim(),
-          email: data.email.trim().toLowerCase(),
-          phone: data.phone.trim(),
-          companyName: data.companyName?.trim() || '',
-          industry: data.industry || '',
-          additionalNotes: data.additionalNotes?.trim() || '',
-          newsletterSubscription: data.newsletterSubscription || false
+          records: [record]
         }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Backend API Error:', response.status, errorText);
+        const errorData = await response.text();
+        console.error('❌ Airtable API Error:', response.status, errorData);
         
         // Handle specific error cases
         if (response.status === 401) {
-          throw new Error('Authentication failed. Please try again.');
+          throw new Error('Invalid API key. Please check your Airtable configuration.');
         } else if (response.status === 403) {
-          throw new Error('Access denied. Please contact support.');
+          throw new Error('Access denied. Please check your Airtable permissions.');
+        } else if (response.status === 404) {
+          throw new Error('Airtable base or table not found. Please check your configuration.');
         } else if (response.status === 422) {
+          // Parse the error to provide more specific feedback
+          try {
+            const errorObj = JSON.parse(errorData);
+            if (errorObj.error?.message) {
+              throw new Error(`Airtable validation error: ${errorObj.error.message}`);
+            }
+          } catch (parseError) {
+            // If we can't parse the error, use a generic message
+          }
           throw new Error('Invalid data format. Please check your form inputs and try again.');
-        } else if (response.status >= 500) {
-          throw new Error('Server error. Please try again in a few moments.');
         } else {
-          throw new Error(`Submission failed: ${response.status} ${response.statusText}`);
+          throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
         }
       }
 
-      const result = await response.json();
-      console.log('✅ Submission successful:', result);
+      const result: AirtableResponse = await response.json();
+      console.log('✅ Airtable submission successful:', result);
 
       return {
         success: true,
-        recordId: result.recordId || result.id
+        recordId: result.records[0]?.id
       };
 
     } catch (error) {
@@ -113,23 +212,27 @@ class AirtableService {
 
   async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
-      const response = await fetch(`${this.apiEndpoint}/test`, {
+      this.validateApiKey();
+
+      const response = await fetch(`${this.baseUrl}?maxRecords=1`, {
         method: 'GET',
         headers: {
-          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Connection test failed: ${response.status} ${response.statusText}`);
+        throw new Error(`API test failed: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: AirtableResponse = await response.json();
+      const availableFields = data.records?.[0] ? Object.keys(data.records[0].fields) : [];
 
       return {
         success: true,
-        message: 'Connection successful',
-        availableFields: data.availableFields
+        message: 'Airtable connection successful',
+        availableFields
       };
 
     } catch (error) {
@@ -141,9 +244,12 @@ class AirtableService {
   }
 
   // Get configuration info for debugging
-  getConfig(): { apiEndpoint: string } {
+  getConfig(): { baseId: string; tableId: string; hasApiKey: boolean; fieldMapping: typeof FIELD_IDS } {
     return {
-      apiEndpoint: this.apiEndpoint
+      baseId: this.baseId,
+      tableId: this.tableId,
+      hasApiKey: !!this.apiKey && this.apiKey !== 'your_airtable_api_key',
+      fieldMapping: FIELD_IDS
     };
   }
 }
