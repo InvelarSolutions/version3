@@ -22,10 +22,20 @@ interface ContactFormData {
   newsletterSubscription: boolean;
 }
 
-// Field mapping configurations - try different formats
+// Generate UUID v4
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Field mapping configurations - updated based on actual Airtable schema
 const FIELD_MAPPINGS = [
-  // Format 1: Title Case with spaces (original)
+  // Format 1: Based on actual Airtable field names (most likely correct)
   {
+    submissionId: 'Submission ID',
     firstName: 'First Name',
     lastName: 'Last Name',
     email: 'Email',
@@ -34,10 +44,11 @@ const FIELD_MAPPINGS = [
     industry: 'Industry',
     additionalNotes: 'Additional Notes',
     newsletterSubscription: 'Newsletter Subscription',
-    submissionDate: 'Submission Date'
+    submissionDate: 'Created At'
   },
   // Format 2: snake_case (matches database)
   {
+    submissionId: 'submission_id',
     firstName: 'first_name',
     lastName: 'last_name',
     email: 'email',
@@ -50,6 +61,7 @@ const FIELD_MAPPINGS = [
   },
   // Format 3: camelCase
   {
+    submissionId: 'submissionId',
     firstName: 'firstName',
     lastName: 'lastName',
     email: 'email',
@@ -62,6 +74,7 @@ const FIELD_MAPPINGS = [
   },
   // Format 4: lowercase with spaces
   {
+    submissionId: 'submission id',
     firstName: 'first name',
     lastName: 'last name',
     email: 'email',
@@ -70,7 +83,7 @@ const FIELD_MAPPINGS = [
     industry: 'industry',
     additionalNotes: 'additional notes',
     newsletterSubscription: 'newsletter subscription',
-    submissionDate: 'submission date'
+    submissionDate: 'created at'
   }
 ];
 
@@ -162,10 +175,16 @@ class AirtableService {
 
           // Try to match fields with our mappings
           for (const mapping of FIELD_MAPPINGS) {
-            const requiredFields = [mapping.firstName, mapping.lastName, mapping.email, mapping.phone];
+            const requiredFields = [
+              mapping.submissionId,
+              mapping.firstName, 
+              mapping.lastName, 
+              mapping.email, 
+              mapping.phone
+            ];
             const matchingFields = requiredFields.filter(field => availableFields.includes(field));
             
-            if (matchingFields.length >= 3) { // At least 3 required fields match
+            if (matchingFields.length >= 4) { // At least 4 required fields match (including submissionId)
               console.log('✅ Found matching field mapping:', mapping);
               this.fieldMapping = mapping;
               return mapping;
@@ -187,6 +206,9 @@ class AirtableService {
     const record: AirtableRecord = {
       fields: {}
     };
+
+    // Generate and add Submission ID (primary key)
+    record.fields[mapping.submissionId] = generateUUID();
 
     // Map the form data to Airtable fields
     record.fields[mapping.firstName] = data.firstName.trim();
