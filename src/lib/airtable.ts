@@ -1,4 +1,4 @@
-// Airtable API integration using backend API endpoint
+// Airtable API integration using Netlify Functions
 interface ContactFormData {
   firstName: string;
   lastName: string;
@@ -14,7 +14,7 @@ class AirtableService {
   private apiEndpoint: string;
 
   constructor() {
-    // Use public API endpoint that redirects to Netlify Functions
+    // Use API endpoint that works in both development and production
     this.apiEndpoint = '/api/airtable';
   }
 
@@ -88,6 +88,8 @@ class AirtableService {
           throw new Error('Invalid data format. Please check your form inputs and try again.');
         } else if (response.status >= 500) {
           throw new Error('Server error. Please try again in a few moments.');
+        } else if (response.status === 404) {
+          throw new Error('API endpoint not found. Please ensure the Netlify Functions are properly deployed.');
         } else {
           throw new Error(`Submission failed: ${response.status} ${response.statusText}`);
         }
