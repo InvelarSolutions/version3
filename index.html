@@ -6,28 +6,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Invelar - Intelligent Automation for the Modern Enterprise</title>
     <meta name="description" content="Transform your business with AI-powered automation. Streamline processes, reduce costs, and accelerate growth with Invelar's intelligent automation solutions." />
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="voiceflow-chat-container"></div>
     
     <!-- Voiceflow Chat Widget Script -->
     <script type="text/javascript">
       (function(d, t) {
           var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
           v.onload = function() {
-            window.voiceflow.chat.load({
-              verify: { projectID: 'your-project-id' },
-              url: 'https://general-runtime.voiceflow.com',
-              versionID: 'production'
-            });
+            // Only load Voiceflow if a valid project ID is provided
+            const projectId = 'your-project-id'; // Replace with your actual Voiceflow project ID
+            
+            if (projectId && projectId !== 'your-project-id') {
+              window.voiceflow.chat.load({
+                verify: { projectID: projectId },
+                url: 'https://general-runtime.voiceflow.com',
+                versionID: 'production',
+                render: {
+                  mode: 'embedded',
+                  target: document.getElementById('voiceflow-chat-container')
+                }
+              });
+            } else {
+              console.warn('Voiceflow project ID not configured. Please replace "your-project-id" with your actual project ID.');
+            }
           }
-          v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
+          v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; 
+          v.type = "text/javascript"; 
+          s.parentNode.insertBefore(v, s);
       })(document, 'script');
     </script>
-    <script type="text/javascript">
-      // Add global type declaration for Voiceflow
-      window.voiceflow = window.voiceflow || {};
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
+    
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
