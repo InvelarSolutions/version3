@@ -15,7 +15,6 @@ import {
   MapPin,
   Menu,
   X,
-  MessageCircle,
   Globe,
   PhoneCall,
   Send,
@@ -29,7 +28,6 @@ import {
   Copy
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { EnhancedChatbot } from '@/components/ui/enhanced-chatbot';
 
 // Custom hook for intersection observer with scroll-based fade
 const useScrollFadeAnimation = (options = {}) => {
@@ -150,7 +148,6 @@ export default function HomePage() {
   const [emailCopied, setEmailCopied] = useState(false);
   const [showPhoneBubble, setShowPhoneBubble] = useState(false);
   const [phoneCopied, setPhoneCopied] = useState(false);
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const [screenDimensions, setScreenDimensions] = useState({ width: 1920, height: 1080 }); // Default server-safe values
   
   const emailBubbleRef = useRef<HTMLDivElement>(null);
@@ -228,10 +225,6 @@ export default function HomePage() {
       element.scrollIntoView({ behavior: 'smooth' });
     }
     setIsMenuOpen(false);
-  };
-
-  const handleChatClick = () => {
-    setIsChatbotOpen(true);
   };
 
   const handleMailClick = () => {
@@ -420,16 +413,6 @@ export default function HomePage() {
           >
             Contact
           </button>
-          <Button 
-            id="chat-button"
-            onClick={handleChatClick}
-            variant="outline"
-            size="sm"
-            className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 p-2"
-            title="AI Chat Assistant"
-          >
-            <MessageCircle className="h-4 w-4 text-black" />
-          </Button>
           <Link to="/contact">
             <Button className="bg-white text-black hover:bg-gray-100 font-semibold transition-all duration-300 transform hover:scale-105">
               Get Started
@@ -473,15 +456,6 @@ export default function HomePage() {
               >
                 Contact
               </button>
-              <Button 
-                onClick={handleChatClick}
-                variant="outline"
-                size="sm"
-                className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 w-fit"
-              >
-                <MessageCircle className="h-4 w-4 mr-2 text-black" />
-                AI Chat
-              </Button>
               <Link to="/contact">
                 <Button className="bg-white text-black hover:bg-gray-100 font-semibold w-fit transition-all duration-300 transform hover:scale-105">
                   Get Started
@@ -744,12 +718,6 @@ export default function HomePage() {
                   title: "AI Agents & Assistants",
                   description: "We deploy sophisticated AI agents that learn from your business patterns and make autonomous decisions. These intelligent systems work 24/7 to optimize operations, predict bottlenecks, and continuously improve performance.",
                   features: ["Custom AI model training", "Natural language processing", "Predictive analytics", "Autonomous decision making"]
-                },
-                {
-                  icon: MessageCircle,
-                  title: "AI Chatbot Implementation",
-                  description: "We revolutionize customer service with intelligent chatbots that understand context, handle complex queries, and provide personalized responses. Reduce response times by 90% while improving customer satisfaction.",
-                  features: ["Multi-language support", "CRM integration", "Lead qualification", "24/7 customer support"]
                 },
                 {
                   icon: Globe,
@@ -1027,12 +995,6 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
-
-      {/* Enhanced Chatbot Component */}
-      <EnhancedChatbot 
-        isOpen={isChatbotOpen} 
-        onClose={() => setIsChatbotOpen(false)} 
-      />
     </div>
   );
 }

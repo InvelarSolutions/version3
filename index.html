@@ -9,33 +9,30 @@
   </head>
   <body>
     <div id="root"></div>
-    <div id="voiceflow-chat-container"></div>
+    <script type="module" src="/src/main.tsx"></script>
     
     <!-- Voiceflow Chat Widget Script -->
     <script type="text/javascript">
       (function(d, t) {
           var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
           v.onload = function() {
-            try {
-              window.voiceflow.chat.load({
-                verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
-                url: 'https://general-runtime.voiceflow.com',
-                versionID: 'production',
-                render: {
-                  mode: 'embedded',
-                  target: document.getElementById('voiceflow-chat-container')
-                }
-              });
-            } catch (error) {
-              console.warn('Voiceflow widget failed to load:', error.message);
-            }
+            window.voiceflow.chat.load({
+              verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
+              url: 'https://general-runtime.voiceflow.com',
+              versionID: 'production',
+              voice: {
+                url: "https://runtime-api.voiceflow.com"
+              },
+              render: {
+                mode: 'overlay',
+                position: 'bottom-right'
+              }
+            });
           }
-          v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; 
+          v.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs"; 
           v.type = "text/javascript"; 
           s.parentNode.insertBefore(v, s);
       })(document, 'script');
     </script>
-    
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
