@@ -66,8 +66,14 @@ class AirtableService {
 
   private validateApiKey(): boolean {
     if (!this.apiKey || this.apiKey === 'your_airtable_api_key') {
-      throw new Error('Airtable API key is not configured. Please set VITE_AIRTABLE_API_KEY in your environment variables.');
+      throw new Error('Airtable API key is required. Please set VITE_AIRTABLE_API_KEY in your environment variables.');
     }
+
+    // Validate API key format (Airtable personal access tokens start with 'pat')
+    if (!this.apiKey.startsWith('pat') || this.apiKey.length < 20) {
+      throw new Error('Invalid Airtable API key format. Please ensure you are using a valid personal access token.');
+    }
+
     return true;
   }
 
@@ -113,7 +119,7 @@ class AirtableService {
     
     const record: AirtableRecord = {
       fields: {
-        // Required fields
+        // Required fields using field IDs
         [FIELD_IDS.firstName]: data.firstName.trim(),
         [FIELD_IDS.lastName]: data.lastName.trim(),
         [FIELD_IDS.email]: data.email.trim().toLowerCase(),
@@ -122,13 +128,13 @@ class AirtableService {
         // Set current status to indicate new submission
         [FIELD_IDS.currentStatus]: 'New Submission',
         
-        // Optional fields
+        // Optional fields using field IDs
         [FIELD_IDS.companyName]: data.companyName?.trim() || '',
         [FIELD_IDS.industry]: data.industry || '',
         [FIELD_IDS.additionalNotes]: data.additionalNotes?.trim() || '',
         [FIELD_IDS.newsletterSubscription]: data.newsletterSubscription || false,
         
-        // Timestamps
+        // Timestamps using field IDs
         [FIELD_IDS.creationTimestamp]: currentTimestamp,
         [FIELD_IDS.syncTimestamp]: currentTimestamp,
         [FIELD_IDS.lastUpdateTimestamp]: currentTimestamp
@@ -152,12 +158,14 @@ class AirtableService {
       console.log('📤 Submitting to Airtable with field IDs');
       console.log('📤 Record data:', record);
 
-      // Make the API request to Airtable
+      // Make the API request to Airtable with proper headers
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
         },
         body: JSON.stringify({
           records: [record]
@@ -218,6 +226,8 @@ class AirtableService {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
         },
       });
 
