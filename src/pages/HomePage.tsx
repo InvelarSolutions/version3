@@ -229,7 +229,7 @@ export default function HomePage() {
   };
 
   const handleChatClick = () => {
-    // Trigger the Voiceflow widget
+    // Trigger the custom Voiceflow widget
     if (window.voiceflow && window.voiceflow.chat) {
       window.voiceflow.chat.open();
     }
@@ -427,6 +427,7 @@ export default function HomePage() {
             size="sm"
             className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 p-2"
             title="AI Chat Assistant"
+            data-chat-button
           >
             <MessageCircle className="h-4 w-4" />
           </Button>
@@ -478,6 +479,7 @@ export default function HomePage() {
                 variant="outline"
                 size="sm"
                 className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 w-fit"
+                data-chat-button
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
                 AI Chat

@@ -18,14 +18,17 @@ declare global {
           verify: { projectID: string };
           url: string;
           versionID: string;
-          voice: { url: string };
-          render: {
-            mode: string;
-            position: string;
-          };
         }) => void;
         open: () => void;
+        close: () => void;
+        toggle: () => void;
       };
+    };
+    voiceflowChatState: {
+      isOpen: boolean;
+      widget: HTMLIFrameElement | null;
+      container: HTMLDivElement | null;
+      isInitialized: boolean;
     };
   }
 }
