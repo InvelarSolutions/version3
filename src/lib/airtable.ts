@@ -14,8 +14,8 @@ class AirtableService {
   private apiEndpoint: string;
 
   constructor() {
-    // Use your backend API endpoint - you'll need to deploy this
-    this.apiEndpoint = '/api/airtable';
+    // Use Netlify Functions endpoint
+    this.apiEndpoint = '/.netlify/functions/airtable';
   }
 
   private validateFormData(data: ContactFormData): void {
@@ -54,9 +54,9 @@ class AirtableService {
       // Validate form data
       this.validateFormData(data);
 
-      console.log('📤 Submitting to Airtable via backend API');
+      console.log('📤 Submitting to Airtable via Netlify Functions');
 
-      // Submit to your backend API endpoint
+      // Submit to Netlify Function
       const response = await fetch(this.apiEndpoint, {
         method: 'POST',
         headers: {
@@ -77,11 +77,11 @@ class AirtableService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Backend API Error:', response.status, errorText);
+        console.error('❌ Netlify Function Error:', response.status, errorText);
         
         // Handle specific error cases
         if (response.status === 401) {
-          throw new Error('Authentication failed. Please try again.');
+          throw new Error('Authentication failed. Please check your API configuration.');
         } else if (response.status === 403) {
           throw new Error('Access denied. Please contact support.');
         } else if (response.status === 422) {
@@ -113,7 +113,7 @@ class AirtableService {
 
   async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
-      const response = await fetch(`${this.apiEndpoint}/test`, {
+      const response = await fetch(`/.netlify/functions/airtable-test`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -141,9 +141,12 @@ class AirtableService {
   }
 
   // Get configuration info for debugging
-  getConfig(): { apiEndpoint: string } {
+  getConfig(): { apiEndpoint: string; hasApiKey: boolean; baseId: string; tableId: string } {
     return {
-      apiEndpoint: this.apiEndpoint
+      apiEndpoint: this.apiEndpoint,
+      hasApiKey: true, // Netlify Functions will have access to the environment variable
+      baseId: 'appOjOMHTayU1oZLJ',
+      tableId: 'tblhpwqJMeAIETi1v'
     };
   }
 }
