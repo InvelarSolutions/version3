@@ -1,22 +1,12 @@
 // Airtable API integration
 interface AirtableRecord {
-  fields: {
-    'First Name': string;
-    'Last Name': string;
-    'Email': string;
-    'Phone': string;
-    'Company Name'?: string;
-    'Industry'?: string;
-    'Additional Notes'?: string;
-    'Newsletter Subscription': boolean;
-    'Submission Date': string;
-  };
+  fields: Record<string, any>;
 }
 
 interface AirtableResponse {
   records: Array<{
     id: string;
-    fields: AirtableRecord['fields'];
+    fields: Record<string, any>;
     createdTime: string;
   }>;
 }
@@ -32,11 +22,64 @@ interface ContactFormData {
   newsletterSubscription: boolean;
 }
 
+// Field mapping configurations - try different formats
+const FIELD_MAPPINGS = [
+  // Format 1: Title Case with spaces (original)
+  {
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    email: 'Email',
+    phone: 'Phone',
+    companyName: 'Company Name',
+    industry: 'Industry',
+    additionalNotes: 'Additional Notes',
+    newsletterSubscription: 'Newsletter Subscription',
+    submissionDate: 'Submission Date'
+  },
+  // Format 2: snake_case (matches database)
+  {
+    firstName: 'first_name',
+    lastName: 'last_name',
+    email: 'email',
+    phone: 'phone',
+    companyName: 'company_name',
+    industry: 'industry',
+    additionalNotes: 'additional_notes',
+    newsletterSubscription: 'newsletter_subscription',
+    submissionDate: 'created_at'
+  },
+  // Format 3: camelCase
+  {
+    firstName: 'firstName',
+    lastName: 'lastName',
+    email: 'email',
+    phone: 'phone',
+    companyName: 'companyName',
+    industry: 'industry',
+    additionalNotes: 'additionalNotes',
+    newsletterSubscription: 'newsletterSubscription',
+    submissionDate: 'submissionDate'
+  },
+  // Format 4: lowercase with spaces
+  {
+    firstName: 'first name',
+    lastName: 'last name',
+    email: 'email',
+    phone: 'phone',
+    companyName: 'company name',
+    industry: 'industry',
+    additionalNotes: 'additional notes',
+    newsletterSubscription: 'newsletter subscription',
+    submissionDate: 'submission date'
+  }
+];
+
 class AirtableService {
   private apiKey: string;
   private baseId: string;
   private tableId: string;
   private baseUrl: string;
+  private fieldMapping: Record<string, string> | null = null;
 
   constructor() {
     this.apiKey = import.meta.env.VITE_AIRTABLE_API_KEY || '';
@@ -93,6 +136,83 @@ class AirtableService {
     }
   }
 
+  // Discover the correct field mapping by testing different formats
+  private async discoverFieldMapping(): Promise<Record<string, string>> {
+    if (this.fieldMapping) {
+      return this.fieldMapping;
+    }
+
+    console.log('🔍 Discovering Airtable field mapping...');
+
+    // First, try to get the table schema
+    try {
+      const response = await fetch(`${this.baseUrl}?maxRecords=1`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data: AirtableResponse = await response.json();
+        if (data.records && data.records.length > 0) {
+          const availableFields = Object.keys(data.records[0].fields);
+          console.log('📋 Available Airtable fields:', availableFields);
+
+          // Try to match fields with our mappings
+          for (const mapping of FIELD_MAPPINGS) {
+            const requiredFields = [mapping.firstName, mapping.lastName, mapping.email, mapping.phone];
+            const matchingFields = requiredFields.filter(field => availableFields.includes(field));
+            
+            if (matchingFields.length >= 3) { // At least 3 required fields match
+              console.log('✅ Found matching field mapping:', mapping);
+              this.fieldMapping = mapping;
+              return mapping;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch table schema, will try default mapping');
+    }
+
+    // Fallback to the first mapping (original format)
+    console.log('📝 Using default field mapping');
+    this.fieldMapping = FIELD_MAPPINGS[0];
+    return this.fieldMapping;
+  }
+
+  private async createRecord(data: ContactFormData, mapping: Record<string, string>): Promise<AirtableRecord> {
+    const record: AirtableRecord = {
+      fields: {}
+    };
+
+    // Map the form data to Airtable fields
+    record.fields[mapping.firstName] = data.firstName.trim();
+    record.fields[mapping.lastName] = data.lastName.trim();
+    record.fields[mapping.email] = data.email.trim().toLowerCase();
+    record.fields[mapping.phone] = this.formatPhoneNumber(data.phone);
+    
+    // Optional fields
+    if (data.companyName?.trim()) {
+      record.fields[mapping.companyName] = data.companyName.trim();
+    }
+    
+    if (data.industry) {
+      record.fields[mapping.industry] = data.industry;
+    }
+    
+    if (data.additionalNotes?.trim()) {
+      record.fields[mapping.additionalNotes] = data.additionalNotes.trim();
+    }
+    
+    record.fields[mapping.newsletterSubscription] = data.newsletterSubscription || false;
+    record.fields[mapping.submissionDate] = new Date().toISOString();
+
+    return record;
+  }
+
   async submitContactForm(data: ContactFormData): Promise<{ success: boolean; recordId?: string; error?: string }> {
     try {
       // Validate API configuration
@@ -101,22 +221,14 @@ class AirtableService {
       // Validate form data
       this.validateFormData(data);
 
-      // Prepare the record for Airtable
-      const record: AirtableRecord = {
-        fields: {
-          'First Name': data.firstName.trim(),
-          'Last Name': data.lastName.trim(),
-          'Email': data.email.trim().toLowerCase(),
-          'Phone': this.formatPhoneNumber(data.phone),
-          'Company Name': data.companyName?.trim() || '',
-          'Industry': data.industry || '',
-          'Additional Notes': data.additionalNotes?.trim() || '',
-          'Newsletter Subscription': data.newsletterSubscription || false,
-          'Submission Date': new Date().toISOString(),
-        }
-      };
+      // Discover the correct field mapping
+      const mapping = await this.discoverFieldMapping();
 
-      console.log('📤 Submitting to Airtable:', record);
+      // Prepare the record for Airtable
+      const record = await this.createRecord(data, mapping);
+
+      console.log('📤 Submitting to Airtable with mapping:', mapping);
+      console.log('📤 Record data:', record);
 
       // Make the API request to Airtable
       const response = await fetch(this.baseUrl, {
@@ -134,6 +246,45 @@ class AirtableService {
         const errorData = await response.text();
         console.error('❌ Airtable API Error:', response.status, errorData);
         
+        // If we get a field name error, try the next mapping
+        if (response.status === 422 && errorData.includes('Unknown field name')) {
+          console.log('🔄 Field name error detected, trying alternative mappings...');
+          
+          // Reset field mapping and try alternatives
+          this.fieldMapping = null;
+          
+          for (let i = 1; i < FIELD_MAPPINGS.length; i++) {
+            try {
+              console.log(`🔄 Trying mapping ${i + 1}:`, FIELD_MAPPINGS[i]);
+              const alternativeRecord = await this.createRecord(data, FIELD_MAPPINGS[i]);
+              
+              const retryResponse = await fetch(this.baseUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${this.apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  records: [alternativeRecord]
+                }),
+              });
+
+              if (retryResponse.ok) {
+                const result: AirtableResponse = await retryResponse.json();
+                console.log('✅ Alternative mapping successful:', FIELD_MAPPINGS[i]);
+                this.fieldMapping = FIELD_MAPPINGS[i]; // Cache successful mapping
+                return {
+                  success: true,
+                  recordId: result.records[0]?.id
+                };
+              }
+            } catch (retryError) {
+              console.log(`❌ Mapping ${i + 1} failed:`, retryError);
+              continue;
+            }
+          }
+        }
+        
         // Handle specific error cases
         if (response.status === 401) {
           throw new Error('Invalid API key. Please check your Airtable configuration.');
@@ -142,7 +293,16 @@ class AirtableService {
         } else if (response.status === 404) {
           throw new Error('Airtable base or table not found. Please check your configuration.');
         } else if (response.status === 422) {
-          throw new Error('Invalid data format. Please check your form inputs.');
+          // Parse the error to provide more specific feedback
+          try {
+            const errorObj = JSON.parse(errorData);
+            if (errorObj.error?.message?.includes('Unknown field name')) {
+              throw new Error(`Field mapping error: ${errorObj.error.message}. Please check your Airtable table field names.`);
+            }
+          } catch (parseError) {
+            // If we can't parse the error, use a generic message
+          }
+          throw new Error('Invalid data format. Please check your Airtable table field names match the expected format.');
         } else {
           throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
         }
@@ -166,7 +326,7 @@ class AirtableService {
     }
   }
 
-  async testConnection(): Promise<{ success: boolean; message: string }> {
+  async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
       this.validateApiKey();
 
@@ -182,9 +342,13 @@ class AirtableService {
         throw new Error(`API test failed: ${response.status} ${response.statusText}`);
       }
 
+      const data: AirtableResponse = await response.json();
+      const availableFields = data.records?.[0] ? Object.keys(data.records[0].fields) : [];
+
       return {
         success: true,
-        message: 'Airtable connection successful'
+        message: 'Airtable connection successful',
+        availableFields
       };
 
     } catch (error) {
@@ -196,11 +360,12 @@ class AirtableService {
   }
 
   // Get configuration info for debugging
-  getConfig(): { baseId: string; tableId: string; hasApiKey: boolean } {
+  getConfig(): { baseId: string; tableId: string; hasApiKey: boolean; currentMapping?: Record<string, string> } {
     return {
       baseId: this.baseId,
       tableId: this.tableId,
-      hasApiKey: !!this.apiKey && this.apiKey !== 'your_airtable_api_key'
+      hasApiKey: !!this.apiKey && this.apiKey !== 'your_airtable_api_key',
+      currentMapping: this.fieldMapping || undefined
     };
   }
 }
