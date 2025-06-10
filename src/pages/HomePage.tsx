@@ -15,6 +15,7 @@ import {
   MapPin,
   Menu,
   X,
+  MessageCircle,
   Globe,
   PhoneCall,
   Send,
@@ -227,6 +228,13 @@ export default function HomePage() {
     setIsMenuOpen(false);
   };
 
+  const handleChatClick = () => {
+    // Trigger the Voiceflow widget
+    if (window.voiceflow && window.voiceflow.chat) {
+      window.voiceflow.chat.open();
+    }
+  };
+
   const handleMailClick = () => {
     setShowEmailBubble(!showEmailBubble);
     setEmailCopied(false);
@@ -413,6 +421,15 @@ export default function HomePage() {
           >
             Contact
           </button>
+          <Button 
+            onClick={handleChatClick}
+            variant="outline"
+            size="sm"
+            className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 p-2"
+            title="AI Chat Assistant"
+          >
+            <MessageCircle className="h-4 w-4" />
+          </Button>
           <Link to="/contact">
             <Button className="bg-white text-black hover:bg-gray-100 font-semibold transition-all duration-300 transform hover:scale-105">
               Get Started
@@ -456,6 +473,15 @@ export default function HomePage() {
               >
                 Contact
               </button>
+              <Button 
+                onClick={handleChatClick}
+                variant="outline"
+                size="sm"
+                className="border-gray-600 text-black hover:bg-gray-800 hover:text-white transition-all duration-300 w-fit"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                AI Chat
+              </Button>
               <Link to="/contact">
                 <Button className="bg-white text-black hover:bg-gray-100 font-semibold w-fit transition-all duration-300 transform hover:scale-105">
                   Get Started

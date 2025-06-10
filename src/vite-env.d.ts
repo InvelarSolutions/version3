@@ -21,9 +21,10 @@ declare global {
           voice: { url: string };
           render: {
             mode: string;
-            target: HTMLElement | null;
+            position: string;
           };
         }) => void;
+        open: () => void;
       };
     };
   }
