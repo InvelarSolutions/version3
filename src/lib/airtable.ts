@@ -1,16 +1,4 @@
-// Airtable API integration using field IDs
-interface AirtableRecord {
-  fields: Record<string, any>;
-}
-
-interface AirtableResponse {
-  records: Array<{
-    id: string;
-    fields: Record<string, any>;
-    createdTime: string;
-  }>;
-}
-
+// Airtable API integration using Supabase Edge Function
 interface ContactFormData {
   firstName: string;
   lastName: string;
@@ -22,70 +10,17 @@ interface ContactFormData {
   newsletterSubscription: boolean;
 }
 
-// Generate UUID v4
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
-// Field mapping using actual Airtable field IDs
-const FIELD_IDS = {
-  firstName: 'fld2yAX1BepyzcYxb',           // First Name
-  lastName: 'fldnLyFGgejjoSTTd',            // Last Name
-  email: 'fldqtGtICn9VQSmyT',               // Email Address
-  phone: 'fldJkeLbcy9NtcBCY',               // Phone Number
-  currentStatus: 'fldFRzOgZvS5kNfex',       // Current Status
-  companyName: 'fldmdPJ6b8w9B45NF',         // Company Name
-  industry: 'fld6IS6IersuxaV1B',            // Industry Type
-  additionalNotes: 'fldWeqmLYt3MX1Wn5',     // Additional Notes
-  newsletterSubscription: 'fldbAeIOCdQQm7JzG', // Newsletter Subscription Status
-  creationTimestamp: 'fldtmLnCmbGEG8g5P',   // Creation Timestamp
-  syncTimestamp: 'fldQZqbSsfJkfUfiw',       // Sync Timestamp
-  lastUpdateTimestamp: 'fldlwObGh6kc1peJ4'  // Last Update Timestamp
-};
-
 class AirtableService {
-  private apiKey: string;
-  private baseId: string;
-  private tableId: string;
-  private baseUrl: string;
+  private supabaseUrl: string;
+  private supabaseAnonKey: string;
 
   constructor() {
-    this.apiKey = import.meta.env.VITE_AIRTABLE_API_KEY || 'pathdCnsO2NWzZNnO.b282f93d07ef47a2cb0186d26ffd8ddbc780729e9397553cfd73624b32a5ade0';
-    this.baseId = import.meta.env.VITE_AIRTABLE_BASE_ID || 'appOjOMHTayU1oZLJ';
-    this.tableId = import.meta.env.VITE_AIRTABLE_TABLE_ID || 'tblhpwqJMeAIETi1v';
-    this.baseUrl = `https://api.airtable.com/v0/${this.baseId}/${this.tableId}`;
+    this.supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    this.supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-    if (!this.apiKey) {
-      console.warn('Airtable API key not found. Please set VITE_AIRTABLE_API_KEY in your environment variables.');
+    if (!this.supabaseUrl || !this.supabaseAnonKey) {
+      console.warn('Supabase configuration not found. Please check your environment variables.');
     }
-  }
-
-  private validateApiKey(): boolean {
-    if (!this.apiKey || this.apiKey === 'your_airtable_api_key') {
-      throw new Error('Airtable API key is required. Please set VITE_AIRTABLE_API_KEY in your environment variables.');
-    }
-
-    // Validate API key format (Airtable personal access tokens start with 'pat')
-    if (!this.apiKey.startsWith('pat') || this.apiKey.length < 20) {
-      throw new Error('Invalid Airtable API key format. Please ensure you are using a valid personal access token.');
-    }
-
-    return true;
-  }
-
-  private formatPhoneNumber(phone: string): string {
-    // Remove any non-digit characters except + and spaces
-    const cleaned = phone.replace(/[^\d\s\+\-\(\)]/g, '');
-    return cleaned.trim();
-  }
-
-  private validateEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
   }
 
   private validateFormData(data: ContactFormData): void {
@@ -114,97 +49,65 @@ class AirtableService {
     }
   }
 
-  private createRecord(data: ContactFormData): AirtableRecord {
-    const currentTimestamp = new Date().toISOString();
-    
-    const record: AirtableRecord = {
-      fields: {
-        // Required fields using field IDs
-        [FIELD_IDS.firstName]: data.firstName.trim(),
-        [FIELD_IDS.lastName]: data.lastName.trim(),
-        [FIELD_IDS.email]: data.email.trim().toLowerCase(),
-        [FIELD_IDS.phone]: this.formatPhoneNumber(data.phone),
-        
-        // Set current status to indicate new submission
-        [FIELD_IDS.currentStatus]: 'New Submission',
-        
-        // Optional fields using field IDs
-        [FIELD_IDS.companyName]: data.companyName?.trim() || '',
-        [FIELD_IDS.industry]: data.industry || '',
-        [FIELD_IDS.additionalNotes]: data.additionalNotes?.trim() || '',
-        [FIELD_IDS.newsletterSubscription]: data.newsletterSubscription || false,
-        
-        // Timestamps using field IDs
-        [FIELD_IDS.creationTimestamp]: currentTimestamp,
-        [FIELD_IDS.syncTimestamp]: currentTimestamp,
-        [FIELD_IDS.lastUpdateTimestamp]: currentTimestamp
-      }
-    };
-
-    return record;
+  private validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   async submitContactForm(data: ContactFormData): Promise<{ success: boolean; recordId?: string; error?: string }> {
     try {
-      // Validate API configuration
-      this.validateApiKey();
-
       // Validate form data
       this.validateFormData(data);
 
-      // Prepare the record for Airtable using field IDs
-      const record = this.createRecord(data);
+      console.log('📤 Submitting to Airtable via Supabase Edge Function');
 
-      console.log('📤 Submitting to Airtable with field IDs');
-      console.log('📤 Record data:', record);
-
-      // Make the API request to Airtable with proper headers
-      const response = await fetch(this.baseUrl, {
+      // Use Supabase Edge Function to handle Airtable submission
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/airtable-sync`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${this.supabaseAnonKey}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
         },
         body: JSON.stringify({
-          records: [record]
+          type: 'contact_submission',
+          data: {
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+            email: data.email.trim().toLowerCase(),
+            phone: data.phone.trim(),
+            companyName: data.companyName?.trim() || '',
+            industry: data.industry || '',
+            additionalNotes: data.additionalNotes?.trim() || '',
+            newsletterSubscription: data.newsletterSubscription || false
+          }
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('❌ Airtable API Error:', response.status, errorData);
+        const errorText = await response.text();
+        console.error('❌ Edge Function Error:', response.status, errorText);
         
         // Handle specific error cases
         if (response.status === 401) {
-          throw new Error('Invalid API key. Please check your Airtable configuration.');
+          throw new Error('Authentication failed. Please try again.');
         } else if (response.status === 403) {
-          throw new Error('Access denied. Please check your Airtable permissions.');
-        } else if (response.status === 404) {
-          throw new Error('Airtable base or table not found. Please check your configuration.');
+          throw new Error('Access denied. Please contact support.');
         } else if (response.status === 422) {
-          // Parse the error to provide more specific feedback
-          try {
-            const errorObj = JSON.parse(errorData);
-            if (errorObj.error?.message) {
-              throw new Error(`Airtable validation error: ${errorObj.error.message}`);
-            }
-          } catch (parseError) {
-            // If we can't parse the error, use a generic message
-          }
           throw new Error('Invalid data format. Please check your form inputs and try again.');
+        } else if (response.status >= 500) {
+          throw new Error('Server error. Please try again in a few moments.');
         } else {
-          throw new Error(`Airtable API error: ${response.status} ${response.statusText}`);
+          throw new Error(`Submission failed: ${response.status} ${response.statusText}`);
         }
       }
 
-      const result: AirtableResponse = await response.json();
-      console.log('✅ Airtable submission successful:', result);
+      const result = await response.json();
+      console.log('✅ Submission successful:', result);
 
       return {
         success: true,
-        recordId: result.records[0]?.id
+        recordId: result.recordId || result.id
       };
 
     } catch (error) {
@@ -219,29 +122,32 @@ class AirtableService {
 
   async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
-      this.validateApiKey();
+      if (!this.supabaseUrl || !this.supabaseAnonKey) {
+        throw new Error('Supabase configuration is missing');
+      }
 
-      const response = await fetch(`${this.baseUrl}?maxRecords=1`, {
-        method: 'GET',
+      const response = await fetch(`${this.supabaseUrl}/functions/v1/airtable-sync`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${this.supabaseAnonKey}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
         },
+        body: JSON.stringify({
+          type: 'test_connection'
+        }),
       });
 
       if (!response.ok) {
-        throw new Error(`API test failed: ${response.status} ${response.statusText}`);
+        throw new Error(`Connection test failed: ${response.status} ${response.statusText}`);
       }
 
-      const data: AirtableResponse = await response.json();
-      const availableFields = data.records?.[0] ? Object.keys(data.records[0].fields) : [];
+      const data = await response.json();
 
       return {
         success: true,
-        message: 'Airtable connection successful',
-        availableFields
+        message: 'Connection successful',
+        availableFields: data.availableFields
       };
 
     } catch (error) {
@@ -253,12 +159,10 @@ class AirtableService {
   }
 
   // Get configuration info for debugging
-  getConfig(): { baseId: string; tableId: string; hasApiKey: boolean; fieldMapping: typeof FIELD_IDS } {
+  getConfig(): { hasSupabaseUrl: boolean; hasSupabaseKey: boolean } {
     return {
-      baseId: this.baseId,
-      tableId: this.tableId,
-      hasApiKey: !!this.apiKey && this.apiKey !== 'your_airtable_api_key',
-      fieldMapping: FIELD_IDS
+      hasSupabaseUrl: !!this.supabaseUrl,
+      hasSupabaseKey: !!this.supabaseAnonKey
     };
   }
 }
