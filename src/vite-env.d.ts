@@ -26,9 +26,9 @@ declare global {
     };
     voiceflowChatState: {
       isOpen: boolean;
-      widget: HTMLIFrameElement | null;
-      container: HTMLDivElement | null;
       isInitialized: boolean;
     };
   }
 }
+
+export {}

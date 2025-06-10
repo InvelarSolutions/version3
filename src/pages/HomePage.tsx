@@ -229,10 +229,16 @@ export default function HomePage() {
   };
 
   const handleChatClick = () => {
-    // Trigger the custom Voiceflow widget
-    if (window.voiceflow && window.voiceflow.chat) {
-      window.voiceflow.chat.open();
-    }
+    // Wait for Voiceflow to be initialized
+    const checkAndToggle = () => {
+      if (window.voiceflow && window.voiceflow.chat && window.voiceflowChatState.isInitialized) {
+        window.voiceflow.chat.toggle();
+      } else {
+        // Retry after a short delay if not initialized yet
+        setTimeout(checkAndToggle, 100);
+      }
+    };
+    checkAndToggle();
   };
 
   const handleMailClick = () => {
