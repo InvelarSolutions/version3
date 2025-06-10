@@ -11,7 +11,7 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Voiceflow Chat Widget -->
+    <!-- Voiceflow Chat Widget Integration -->
     <script type="text/javascript">
       // Global state for chat widget
       window.voiceflowChatState = {
@@ -19,129 +19,166 @@
         isInitialized: false
       };
 
-      // Load Voiceflow widget
-      (function(d, t) {
-        var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
-        v.onload = function() {
-          // Initialize Voiceflow with proper configuration
-          window.voiceflow.chat.load({
-            verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
-            url: 'https://general-runtime.voiceflow.com',
-            versionID: 'production'
-          });
-
-          // Mark as initialized
-          window.voiceflowChatState.isInitialized = true;
-
-          // Hide the default launcher immediately after load
-          setTimeout(() => {
-            const launchers = document.querySelectorAll([
-              '[data-testid="launcher"]',
-              '[data-testid="widget-launcher"]',
-              '.vf-launcher',
-              '.vf-widget-launcher',
-              '.vf-test-button',
-              'button[aria-label*="test"]',
-              'button[aria-label*="Test"]',
-              '.widget-launcher',
-              '.chat-launcher'
-            ].join(','));
+      // Custom Voiceflow implementation
+      window.voiceflow = {
+        chat: {
+          load: function(config) {
+            // Store config for later use
+            window.voiceflowConfig = config;
             
-            launchers.forEach(launcher => {
-              launcher.style.display = 'none';
-              launcher.style.visibility = 'hidden';
-              launcher.style.opacity = '0';
-              launcher.style.pointerEvents = 'none';
-            });
-          }, 100);
-
-          // Override the default open/close methods
-          const originalOpen = window.voiceflow.chat.open;
-          const originalClose = window.voiceflow.chat.close;
-
-          window.voiceflow.chat.open = function() {
-            if (!window.voiceflowChatState.isOpen) {
+            // Load the actual Voiceflow widget
+            (function(d, t) {
+              var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+              v.onload = function() {
+                // Initialize with the provided config
+                if (window.voiceflow && window.voiceflow.chat && window.voiceflow.chat.load) {
+                  window.voiceflow.chat.load(config);
+                }
+                
+                // Mark as initialized
+                window.voiceflowChatState.isInitialized = true;
+                
+                // Hide default launcher elements
+                setTimeout(() => {
+                  const hideElements = () => {
+                    const selectors = [
+                      '[data-testid="launcher"]',
+                      '[data-testid="widget-launcher"]',
+                      '.vf-launcher',
+                      '.vf-widget-launcher',
+                      '.vf-test-button',
+                      'button[aria-label*="test"]',
+                      'button[aria-label*="Test"]',
+                      '.widget-launcher',
+                      '.chat-launcher',
+                      'iframe[src*="voiceflow"]'
+                    ];
+                    
+                    selectors.forEach(selector => {
+                      const elements = document.querySelectorAll(selector);
+                      elements.forEach(element => {
+                        if (element && !element.hasAttribute('data-custom-chat')) {
+                          element.style.display = 'none';
+                          element.style.visibility = 'hidden';
+                          element.style.opacity = '0';
+                          element.style.pointerEvents = 'none';
+                        }
+                      });
+                    });
+                  };
+                  
+                  hideElements();
+                  // Repeat hiding in case elements are added dynamically
+                  setInterval(hideElements, 1000);
+                }, 100);
+              };
+              
+              v.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs";
+              v.type = "text/javascript";
+              s.parentNode.insertBefore(v, s);
+            })(document, 'script');
+          },
+          
+          open: function() {
+            if (window.voiceflowChatState.isInitialized && !window.voiceflowChatState.isOpen) {
               window.voiceflowChatState.isOpen = true;
-              originalOpen.call(this);
+              // Trigger the actual Voiceflow open if available
+              if (window.voiceflow && window.voiceflow.chat && window.voiceflow.chat.open) {
+                window.voiceflow.chat.open();
+              }
             }
-          };
-
-          window.voiceflow.chat.close = function() {
-            if (window.voiceflowChatState.isOpen) {
+          },
+          
+          close: function() {
+            if (window.voiceflowChatState.isInitialized && window.voiceflowChatState.isOpen) {
               window.voiceflowChatState.isOpen = false;
-              originalClose.call(this);
+              // Trigger the actual Voiceflow close if available
+              if (window.voiceflow && window.voiceflow.chat && window.voiceflow.chat.close) {
+                window.voiceflow.chat.close();
+              }
             }
-          };
-
-          window.voiceflow.chat.toggle = function() {
+          },
+          
+          toggle: function() {
             if (window.voiceflowChatState.isOpen) {
               this.close();
             } else {
               this.open();
             }
-          };
-        };
-        
-        v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; 
-        v.type = "text/javascript"; 
-        s.parentNode.insertBefore(v, s);
-      })(document, 'script');
+          }
+        }
+      };
 
-      // Hide any dynamically created Voiceflow UI elements
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          mutation.addedNodes.forEach(function(node) {
-            if (node.nodeType === 1) { // Element node
-              // Hide any Voiceflow launcher elements
-              const launchers = node.querySelectorAll && node.querySelectorAll([
-                '[data-testid="launcher"]',
-                '[data-testid="widget-launcher"]',
-                '.vf-launcher',
-                '.vf-widget-launcher',
-                '.vf-test-button',
-                '.widget-launcher',
-                '.chat-launcher',
-                'button[aria-label*="test"]',
-                'button[aria-label*="Test"]'
-              ].join(','));
-              
-              if (launchers) {
-                launchers.forEach(launcher => {
-                  launcher.style.display = 'none';
-                  launcher.style.visibility = 'hidden';
-                  launcher.style.opacity = '0';
-                  launcher.style.pointerEvents = 'none';
-                });
-              }
+      // Initialize Voiceflow when DOM is ready
+      document.addEventListener('DOMContentLoaded', function() {
+        // Load Voiceflow with your configuration
+        window.voiceflow.chat.load({
+          verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
+          url: 'https://general-runtime.voiceflow.com',
+          versionID: 'production',
+          voice: {
+            url: "https://runtime-api.voiceflow.com"
+          },
+          render: {
+            mode: 'embedded'
+          }
+        });
 
-              // Also check if the node itself is a launcher
-              if (node.matches && node.matches([
-                '[data-testid="launcher"]',
-                '[data-testid="widget-launcher"]',
-                '.vf-launcher',
-                '.vf-widget-launcher',
-                '.vf-test-button',
-                '.widget-launcher',
-                '.chat-launcher',
-                'button[aria-label*="test"]',
-                'button[aria-label*="Test"]'
-              ].join(','))) {
-                node.style.display = 'none';
-                node.style.visibility = 'hidden';
-                node.style.opacity = '0';
-                node.style.pointerEvents = 'none';
+        // Observer to hide any dynamically created Voiceflow UI elements
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === 1) { // Element node
+                const selectors = [
+                  '[data-testid="launcher"]',
+                  '[data-testid="widget-launcher"]',
+                  '.vf-launcher',
+                  '.vf-widget-launcher',
+                  '.vf-test-button',
+                  '.widget-launcher',
+                  '.chat-launcher',
+                  'button[aria-label*="test"]',
+                  'button[aria-label*="Test"]'
+                ];
+                
+                // Hide any Voiceflow launcher elements
+                const launchers = node.querySelectorAll && node.querySelectorAll(selectors.join(','));
+                if (launchers) {
+                  launchers.forEach(launcher => {
+                    if (!launcher.hasAttribute('data-custom-chat')) {
+                      launcher.style.display = 'none';
+                      launcher.style.visibility = 'hidden';
+                      launcher.style.opacity = '0';
+                      launcher.style.pointerEvents = 'none';
+                    }
+                  });
+                }
+
+                // Also check if the node itself is a launcher
+                if (node.matches && node.matches(selectors.join(','))) {
+                  if (!node.hasAttribute('data-custom-chat')) {
+                    node.style.display = 'none';
+                    node.style.visibility = 'hidden';
+                    node.style.opacity = '0';
+                    node.style.pointerEvents = 'none';
+                  }
+                }
               }
-            }
+            });
           });
         });
-      });
 
-      // Start observing after DOM is ready
-      document.addEventListener('DOMContentLoaded', function() {
         observer.observe(document.body, {
           childList: true,
           subtree: true
         });
+      });
+
+      // Prevent any external scripts from overriding our implementation
+      Object.defineProperty(window, 'voiceflow', {
+        value: window.voiceflow,
+        writable: false,
+        configurable: false
       });
     </script>
   </body>
