@@ -1,4 +1,4 @@
-// Airtable API integration using Supabase Edge Function
+// Airtable API integration using backend API endpoint
 interface ContactFormData {
   firstName: string;
   lastName: string;
@@ -11,16 +11,11 @@ interface ContactFormData {
 }
 
 class AirtableService {
-  private supabaseUrl: string;
-  private supabaseAnonKey: string;
+  private apiEndpoint: string;
 
   constructor() {
-    this.supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    this.supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!this.supabaseUrl || !this.supabaseAnonKey) {
-      console.warn('Supabase configuration not found. Please check your environment variables.');
-    }
+    // Use your backend API endpoint - you'll need to deploy this
+    this.apiEndpoint = '/api/airtable';
   }
 
   private validateFormData(data: ContactFormData): void {
@@ -59,34 +54,30 @@ class AirtableService {
       // Validate form data
       this.validateFormData(data);
 
-      console.log('📤 Submitting to Airtable via Supabase Edge Function');
+      console.log('📤 Submitting to Airtable via backend API');
 
-      // Use Supabase Edge Function to handle Airtable submission
-      const response = await fetch(`${this.supabaseUrl}/functions/v1/airtable-sync`, {
+      // Submit to your backend API endpoint
+      const response = await fetch(this.apiEndpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.supabaseAnonKey}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          type: 'contact_submission',
-          data: {
-            firstName: data.firstName.trim(),
-            lastName: data.lastName.trim(),
-            email: data.email.trim().toLowerCase(),
-            phone: data.phone.trim(),
-            companyName: data.companyName?.trim() || '',
-            industry: data.industry || '',
-            additionalNotes: data.additionalNotes?.trim() || '',
-            newsletterSubscription: data.newsletterSubscription || false
-          }
+          firstName: data.firstName.trim(),
+          lastName: data.lastName.trim(),
+          email: data.email.trim().toLowerCase(),
+          phone: data.phone.trim(),
+          companyName: data.companyName?.trim() || '',
+          industry: data.industry || '',
+          additionalNotes: data.additionalNotes?.trim() || '',
+          newsletterSubscription: data.newsletterSubscription || false
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Edge Function Error:', response.status, errorText);
+        console.error('❌ Backend API Error:', response.status, errorText);
         
         // Handle specific error cases
         if (response.status === 401) {
@@ -122,20 +113,11 @@ class AirtableService {
 
   async testConnection(): Promise<{ success: boolean; message: string; availableFields?: string[] }> {
     try {
-      if (!this.supabaseUrl || !this.supabaseAnonKey) {
-        throw new Error('Supabase configuration is missing');
-      }
-
-      const response = await fetch(`${this.supabaseUrl}/functions/v1/airtable-sync`, {
-        method: 'POST',
+      const response = await fetch(`${this.apiEndpoint}/test`, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.supabaseAnonKey}`,
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify({
-          type: 'test_connection'
-        }),
       });
 
       if (!response.ok) {
@@ -159,10 +141,9 @@ class AirtableService {
   }
 
   // Get configuration info for debugging
-  getConfig(): { hasSupabaseUrl: boolean; hasSupabaseKey: boolean } {
+  getConfig(): { apiEndpoint: string } {
     return {
-      hasSupabaseUrl: !!this.supabaseUrl,
-      hasSupabaseKey: !!this.supabaseAnonKey
+      apiEndpoint: this.apiEndpoint
     };
   }
 }

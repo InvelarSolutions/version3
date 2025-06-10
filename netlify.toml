@@ -9,3 +9,14 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# API endpoint for Airtable integration
+[[redirects]]
+  from = "/api/airtable"
+  to = "/.netlify/functions/airtable"
+  status = 200
+
+[[redirects]]
+  from = "/api/airtable/test"
+  to = "/.netlify/functions/airtable-test"
+  status = 200
