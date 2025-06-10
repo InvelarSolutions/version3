@@ -152,6 +152,8 @@ export default function HomePage() {
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const [isVoiceflowChatOpen, setIsVoiceflowChatOpen] = useState(false);
+  const [voiceflowLoaded, setVoiceflowLoaded] = useState(false);
+  const [voiceflowError, setVoiceflowError] = useState(false);
   const [screenDimensions, setScreenDimensions] = useState({ width: 1920, height: 1080 }); // Default server-safe values
   
   const emailBubbleRef = useRef<HTMLDivElement>(null);
@@ -176,7 +178,7 @@ export default function HomePage() {
     return () => window.removeEventListener('resize', updateScreenDimensions);
   }, []);
 
-  // Initialize Voiceflow chat widget
+  // Initialize Voiceflow chat widget with error handling
   useEffect(() => {
     // Create a separate container for Voiceflow outside of React's control
     const voiceflowDiv = document.createElement('div');
@@ -199,25 +201,54 @@ export default function HomePage() {
     document.body.appendChild(voiceflowDiv);
     voiceflowContainer.current = voiceflowDiv;
 
-    // Load Voiceflow script
+    // Load Voiceflow script with error handling
     const script = document.createElement('script');
     script.type = 'text/javascript';
+    
     script.onload = function() {
-      if (window.voiceflow) {
-        voiceflowWidget.current = window.voiceflow.chat.load({
-          verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
-          url: 'https://general-runtime.voiceflow.com',
-          versionID: 'production',
-          voice: {
-            url: "https://runtime-api.voiceflow.com"
-          },
-          render: {
-            mode: 'embedded',
-            target: voiceflowDiv
-          }
-        });
+      try {
+        if (window.voiceflow) {
+          // Add timeout to prevent hanging
+          const loadTimeout = setTimeout(() => {
+            console.warn('Voiceflow widget load timeout');
+            setVoiceflowError(true);
+          }, 10000); // 10 second timeout
+
+          voiceflowWidget.current = window.voiceflow.chat.load({
+            verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
+            url: 'https://general-runtime.voiceflow.com',
+            versionID: 'production',
+            voice: {
+              url: "https://runtime-api.voiceflow.com"
+            },
+            render: {
+              mode: 'embedded',
+              target: voiceflowDiv
+            }
+          }).then(() => {
+            clearTimeout(loadTimeout);
+            setVoiceflowLoaded(true);
+            setVoiceflowError(false);
+          }).catch((error: any) => {
+            clearTimeout(loadTimeout);
+            console.error('Voiceflow widget failed to load:', error);
+            setVoiceflowError(true);
+            setVoiceflowLoaded(false);
+          });
+        } else {
+          setVoiceflowError(true);
+        }
+      } catch (error) {
+        console.error('Error initializing Voiceflow widget:', error);
+        setVoiceflowError(true);
       }
     };
+
+    script.onerror = function() {
+      console.error('Failed to load Voiceflow script');
+      setVoiceflowError(true);
+    };
+
     script.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs";
     
     document.head.appendChild(script);
@@ -235,7 +266,7 @@ export default function HomePage() {
 
   // Control Voiceflow chat visibility
   useEffect(() => {
-    if (voiceflowContainer.current) {
+    if (voiceflowContainer.current && voiceflowLoaded && !voiceflowError) {
       if (isVoiceflowChatOpen) {
         voiceflowContainer.current.style.opacity = '1';
         voiceflowContainer.current.style.transform = 'translateY(0)';
@@ -246,7 +277,7 @@ export default function HomePage() {
         voiceflowContainer.current.style.pointerEvents = 'none';
       }
     }
-  }, [isVoiceflowChatOpen]);
+  }, [isVoiceflowChatOpen, voiceflowLoaded, voiceflowError]);
 
   // Handle clicking outside email bubble
   useEffect(() => {
@@ -310,7 +341,12 @@ export default function HomePage() {
   };
 
   const handleVoiceflowChatClick = () => {
-    setIsVoiceflowChatOpen(!isVoiceflowChatOpen);
+    // If Voiceflow failed to load, fall back to the enhanced chatbot
+    if (voiceflowError || !voiceflowLoaded) {
+      setIsChatbotOpen(true);
+    } else {
+      setIsVoiceflowChatOpen(!isVoiceflowChatOpen);
+    }
   };
 
   const handleMailClick = () => {
