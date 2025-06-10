@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { ArrowLeft, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { airtableService, type ContactFormData } from '@/lib/airtable';
+import { contactService, type ContactFormData } from '@/lib/supabase-contact';
 
 // Industry options for the form
 const INDUSTRY_OPTIONS = [
@@ -239,10 +239,10 @@ export default function ContactPage() {
     setIsSubmitting(true);
     
     try {
-      console.log('📝 Starting form submission to Airtable...');
+      console.log('📝 Starting form submission to Supabase...');
       
-      // Submit to Airtable
-      const result = await airtableService.submitContactForm(formData);
+      // Submit to Supabase
+      const result = await contactService.submitContactForm(formData);
       
       if (result.success) {
         console.log('✅ Submission successful:', result.recordId);
