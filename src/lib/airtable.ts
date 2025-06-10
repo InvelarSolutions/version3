@@ -54,7 +54,7 @@ class AirtableService {
   private baseUrl: string;
 
   constructor() {
-    this.apiKey = import.meta.env.VITE_AIRTABLE_API_KEY || 'pathdCnsO2NWzZNnO';
+    this.apiKey = import.meta.env.VITE_AIRTABLE_API_KEY || 'pathdCnsO2NWzZNnO.b282f93d07ef47a2cb0186d26ffd8ddbc780729e9397553cfd73624b32a5ade0';
     this.baseId = import.meta.env.VITE_AIRTABLE_BASE_ID || 'appOjOMHTayU1oZLJ';
     this.tableId = import.meta.env.VITE_AIRTABLE_TABLE_ID || 'tblhpwqJMeAIETi1v';
     this.baseUrl = `https://api.airtable.com/v0/${this.baseId}/${this.tableId}`;
