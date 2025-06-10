@@ -9,6 +9,19 @@
     
     <!-- Voiceflow Chat Widget Script -->
     <script type="text/javascript">
+      (function(d, t) {
+          var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+          v.onload = function() {
+            window.voiceflow.chat.load({
+              verify: { projectID: 'your-project-id' },
+              url: 'https://general-runtime.voiceflow.com',
+              versionID: 'production'
+            });
+          }
+          v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
+      })(document, 'script');
+    </script>
+    <script type="text/javascript">
       // Add global type declaration for Voiceflow
       window.voiceflow = window.voiceflow || {};
     </script>
