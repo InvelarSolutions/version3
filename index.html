@@ -16,12 +16,9 @@
       (function(d, t) {
           var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
           v.onload = function() {
-            // Only load Voiceflow if a valid project ID is provided
-            const projectId = 'your-project-id'; // Replace with your actual Voiceflow project ID
-            
-            if (projectId && projectId !== 'your-project-id') {
+            try {
               window.voiceflow.chat.load({
-                verify: { projectID: projectId },
+                verify: { projectID: '6846c5cea6a8e2a7db8c1327' },
                 url: 'https://general-runtime.voiceflow.com',
                 versionID: 'production',
                 render: {
@@ -29,8 +26,8 @@
                   target: document.getElementById('voiceflow-chat-container')
                 }
               });
-            } else {
-              console.warn('Voiceflow project ID not configured. Please replace "your-project-id" with your actual project ID.');
+            } catch (error) {
+              console.warn('Voiceflow widget failed to load:', error.message);
             }
           }
           v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; 
