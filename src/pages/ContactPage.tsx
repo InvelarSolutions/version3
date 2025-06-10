@@ -9,53 +9,109 @@ import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { ArrowLeft, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { contactService } from '@/lib/supabase';
-import type { Database as DatabaseType } from '@/lib/types/database';
-import { INDUSTRY_OPTIONS } from '@/lib/types/database';
+import { airtableService, type ContactFormData } from '@/lib/airtable';
 
-type ContactSubmissionInsert = DatabaseType['public']['Tables']['contact_submissions']['Insert'];
+// Industry options for the form
+const INDUSTRY_OPTIONS = [
+  { value: 'technology', label: 'Technology' },
+  { value: 'healthcare', label: 'Healthcare' },
+  { value: 'finance', label: 'Finance & Banking' },
+  { value: 'retail', label: 'Retail & E-commerce' },
+  { value: 'manufacturing', label: 'Manufacturing' },
+  { value: 'education', label: 'Education' },
+  { value: 'real_estate', label: 'Real Estate' },
+  { value: 'consulting', label: 'Consulting' },
+  { value: 'marketing', label: 'Marketing & Advertising' },
+  { value: 'legal', label: 'Legal Services' },
+  { value: 'hospitality', label: 'Hospitality & Tourism' },
+  { value: 'transportation', label: 'Transportation & Logistics' },
+  { value: 'energy', label: 'Energy & Utilities' },
+  { value: 'agriculture', label: 'Agriculture' },
+  { value: 'construction', label: 'Construction' },
+  { value: 'media', label: 'Media & Entertainment' },
+  { value: 'nonprofit', label: 'Non-profit' },
+  { value: 'government', label: 'Government' },
+  { value: 'other', label: 'Other' }
+] as const;
 
 export default function ContactPage() {
-  const [formData, setFormData] = useState<ContactSubmissionInsert>({
-    first_name: '',
-    last_name: '',
+  const [formData, setFormData] = useState<ContactFormData>({
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
-    company_name: null,
-    industry: null,
-    additional_notes: null,
-    newsletter_subscription: false
+    companyName: '',
+    industry: '',
+    additionalNotes: '',
+    newsletterSubscription: false
   });
-  const [countryCode, setCountryCode] = useState('US'); // Default to US
+  const [countryCode, setCountryCode] = useState('US');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const validateField = (name: string, value: string): string => {
+    switch (name) {
+      case 'firstName':
+        return !value.trim() ? 'First name is required' : '';
+      case 'lastName':
+        return !value.trim() ? 'Last name is required' : '';
+      case 'email':
+        if (!value.trim()) return 'Email is required';
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return !emailRegex.test(value) ? 'Please enter a valid email address' : '';
+      case 'phone':
+        return !value.trim() ? 'Phone number is required' : '';
+      default:
+        return '';
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
     setFormData(prev => ({
       ...prev,
-      [name]: value.trim() === '' ? null : value
+      [name]: value
     }));
+
+    // Clear validation error when user starts typing
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+
+    // Real-time validation for required fields
+    const error = validateField(name, value);
+    if (error) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: error
+      }));
+    }
   };
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      [name]: value === '' ? null : value
+      [name]: value
     }));
   };
 
   const handleCheckboxChange = (checked: boolean) => {
     setFormData(prev => ({
       ...prev,
-      newsletter_subscription: checked
+      newsletterSubscription: checked
     }));
   };
 
   const handlePhoneChange = (value: string) => {
     setPhoneNumber(value);
+    
     // Get the selected country's dial code
     const countries = [
       { code: "US", dialCode: "+1" },
@@ -132,6 +188,14 @@ export default function ContactPage() {
       ...prev,
       phone: fullPhoneNumber
     }));
+
+    // Clear phone validation error
+    if (validationErrors.phone) {
+      setValidationErrors(prev => ({
+        ...prev,
+        phone: ''
+      }));
+    }
   };
 
   const handleCountryChange = (newCountryCode: string) => {
@@ -142,33 +206,50 @@ export default function ContactPage() {
     }
   };
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    // Validate required fields
+    errors.firstName = validateField('firstName', formData.firstName);
+    errors.lastName = validateField('lastName', formData.lastName);
+    errors.email = validateField('email', formData.email);
+    errors.phone = validateField('phone', formData.phone);
+
+    // Remove empty errors
+    Object.keys(errors).forEach(key => {
+      if (!errors[key]) {
+        delete errors[key];
+      }
+    });
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setError(null);
     
+    // Validate form before submission
+    if (!validateForm()) {
+      setError('Please fix the errors above before submitting.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
     try {
-      console.log('📝 Starting form submission...');
+      console.log('📝 Starting form submission to Airtable...');
       
-      // Prepare the data for submission
-      const submissionData: ContactSubmissionInsert = {
-        first_name: formData.first_name.trim(),
-        last_name: formData.last_name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        company_name: formData.company_name?.trim() || null,
-        industry: formData.industry || null,
-        additional_notes: formData.additional_notes?.trim() || null,
-        newsletter_subscription: formData.newsletter_subscription || false
-      };
-
-      console.log('📤 Submitting data:', submissionData);
-
-      // Submit using the contact service
-      const result = await contactService.createContactSubmission(submissionData);
+      // Submit to Airtable
+      const result = await airtableService.submitContactForm(formData);
       
-      console.log('✅ Submission successful:', result);
-      setIsSubmitted(true);
+      if (result.success) {
+        console.log('✅ Submission successful:', result.recordId);
+        setIsSubmitted(true);
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
     } catch (err) {
       console.error('❌ Error submitting contact form:', err);
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
@@ -179,19 +260,20 @@ export default function ContactPage() {
 
   const resetForm = () => {
     setFormData({
-      first_name: '',
-      last_name: '',
+      firstName: '',
+      lastName: '',
       email: '',
       phone: '',
-      company_name: null,
-      industry: null,
-      additional_notes: null,
-      newsletter_subscription: false
+      companyName: '',
+      industry: '',
+      additionalNotes: '',
+      newsletterSubscription: false
     });
     setCountryCode('US');
     setPhoneNumber('');
     setIsSubmitted(false);
     setError(null);
+    setValidationErrors({});
   };
 
   if (isSubmitted) {
@@ -256,7 +338,7 @@ export default function ContactPage() {
         </Link>
       </div>
 
-      {/* Main Content - Adjusted padding to account for fixed header */}
+      {/* Main Content */}
       <main className="py-20 px-4 pt-32">
         <div className="max-w-2xl mx-auto">
           {/* Header Section */}
@@ -274,9 +356,6 @@ export default function ContactPage() {
               <div>
                 <p className="text-red-300 font-medium">Submission Failed</p>
                 <p className="text-red-300 text-sm">{error}</p>
-                <p className="text-red-300 text-xs mt-1">
-                  Please try again later.
-                </p>
               </div>
             </div>
           )}
@@ -288,38 +367,48 @@ export default function ContactPage() {
                 {/* Name Fields */}
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="first_name" className="text-white font-medium">
+                    <Label htmlFor="firstName" className="text-white font-medium">
                       First Name *
                     </Label>
                     <Input
-                      id="first_name"
-                      name="first_name"
+                      id="firstName"
+                      name="firstName"
                       type="text"
-                      value={formData.first_name}
+                      value={formData.firstName}
                       onChange={handleInputChange}
-                      className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300"
+                      className={`bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300 ${
+                        validationErrors.firstName ? 'border-red-500' : ''
+                      }`}
                       placeholder="Enter your first name"
                       required
                       disabled={isSubmitting}
                       maxLength={100}
                     />
+                    {validationErrors.firstName && (
+                      <p className="text-red-400 text-sm">{validationErrors.firstName}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="last_name" className="text-white font-medium">
+                    <Label htmlFor="lastName" className="text-white font-medium">
                       Last Name *
                     </Label>
                     <Input
-                      id="last_name"
-                      name="last_name"
+                      id="lastName"
+                      name="lastName"
                       type="text"
-                      value={formData.last_name}
+                      value={formData.lastName}
                       onChange={handleInputChange}
-                      className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300"
+                      className={`bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300 ${
+                        validationErrors.lastName ? 'border-red-500' : ''
+                      }`}
                       placeholder="Enter your last name"
                       required
                       disabled={isSubmitting}
                       maxLength={100}
                     />
+                    {validationErrors.lastName && (
+                      <p className="text-red-400 text-sm">{validationErrors.lastName}</p>
+                    )}
                   </div>
                 </div>
 
@@ -334,15 +423,20 @@ export default function ContactPage() {
                     type="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300"
+                    className={`bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300 ${
+                      validationErrors.email ? 'border-red-500' : ''
+                    }`}
                     placeholder="Enter your email address"
                     required
                     disabled={isSubmitting}
                     maxLength={255}
                   />
+                  {validationErrors.email && (
+                    <p className="text-red-400 text-sm">{validationErrors.email}</p>
+                  )}
                 </div>
 
-                {/* Phone Field with International Selector */}
+                {/* Phone Field */}
                 <div className="space-y-2">
                   <Label className="text-white font-medium">
                     Phone Number *
@@ -354,20 +448,23 @@ export default function ContactPage() {
                     onCountryChange={handleCountryChange}
                     disabled={isSubmitting}
                     className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400"
-                    error="Please enter a valid phone number"
+                    error={validationErrors.phone}
                   />
+                  {validationErrors.phone && (
+                    <p className="text-red-400 text-sm">{validationErrors.phone}</p>
+                  )}
                 </div>
 
                 {/* Company Name Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="company_name" className="text-white font-medium">
+                  <Label htmlFor="companyName" className="text-white font-medium">
                     Company Name
                   </Label>
                   <Input
-                    id="company_name"
-                    name="company_name"
+                    id="companyName"
+                    name="companyName"
                     type="text"
-                    value={formData.company_name || ''}
+                    value={formData.companyName}
                     onChange={handleInputChange}
                     className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300"
                     placeholder="Enter your company name"
@@ -382,7 +479,7 @@ export default function ContactPage() {
                     Industry
                   </Label>
                   <Select
-                    value={formData.industry || ''}
+                    value={formData.industry}
                     onValueChange={(value) => handleSelectChange('industry', value)}
                     disabled={isSubmitting}
                   >
@@ -405,13 +502,13 @@ export default function ContactPage() {
 
                 {/* Additional Notes Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="additional_notes" className="text-white font-medium">
+                  <Label htmlFor="additionalNotes" className="text-white font-medium">
                     Additional Notes <span className="text-gray-400 text-sm font-normal">(Optional)</span>
                   </Label>
                   <Textarea
-                    id="additional_notes"
-                    name="additional_notes"
-                    value={formData.additional_notes || ''}
+                    id="additionalNotes"
+                    name="additionalNotes"
+                    value={formData.additionalNotes}
                     onChange={handleInputChange}
                     className="bg-[#1a1a1a] border-gray-600 text-white placeholder-gray-400 focus:border-gray-400 transition-all duration-300 min-h-[100px] resize-y"
                     placeholder="Tell us more about your automation needs, specific challenges, or any questions you have..."
@@ -423,7 +520,7 @@ export default function ContactPage() {
                       Share any specific requirements, goals, or questions you have about AI automation.
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formData.additional_notes?.length || 0}/2000
+                      {formData.additionalNotes?.length || 0}/2000
                     </p>
                   </div>
                 </div>
@@ -431,15 +528,15 @@ export default function ContactPage() {
                 {/* Newsletter Checkbox */}
                 <div className="flex items-start space-x-3 p-4 bg-[#1a1a1a] rounded-lg border border-gray-700">
                   <Checkbox
-                    id="newsletter_subscription"
-                    checked={formData.newsletter_subscription}
+                    id="newsletterSubscription"
+                    checked={formData.newsletterSubscription}
                     onCheckedChange={handleCheckboxChange}
                     className="mt-1 border-gray-500 data-[state=checked]:bg-white data-[state=checked]:border-white"
                     disabled={isSubmitting}
                   />
                   <div className="space-y-1">
                     <Label 
-                      htmlFor="newsletter_subscription" 
+                      htmlFor="newsletterSubscription" 
                       className="text-white font-medium cursor-pointer"
                     >
                       Stay Updated

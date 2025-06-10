@@ -1,15 +1,31 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Database, Settings, Activity, TestTube, Wrench } from 'lucide-react';
+import { ArrowLeft, Settings, TestTube, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { DatabaseStatus } from '@/components/DatabaseStatus';
-import { AirtableSyncDashboard } from '@/components/AirtableSyncDashboard';
-import { AirtableSyncTest } from '@/components/AirtableSyncTest';
-import { AirtableSyncTroubleshooter } from '@/components/AirtableSyncTroubleshooter';
+import { airtableService } from '@/lib/airtable';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'troubleshoot' | 'database' | 'sync' | 'test' | 'settings'>('troubleshoot');
+  const [activeTab, setActiveTab] = useState<'test' | 'settings'>('test');
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+      const result = await airtableService.testConnection();
+      setTestResult(result);
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Connection test failed'
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  const config = airtableService.getConfig();
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white">
@@ -47,23 +63,12 @@ export default function AdminPage() {
           <div className="mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Admin Dashboard</h1>
             <p className="text-xl text-gray-300">
-              Monitor system status, manage data sync, and configure settings
+              Monitor Airtable integration and manage system settings
             </p>
           </div>
 
           {/* Navigation Tabs */}
           <div className="flex space-x-1 mb-8 bg-[#2a2a2a] rounded-lg p-1 w-fit">
-            <button
-              onClick={() => setActiveTab('troubleshoot')}
-              className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
-                activeTab === 'troubleshoot'
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <Wrench className="h-4 w-4 mr-2 inline" />
-              Troubleshoot
-            </button>
             <button
               onClick={() => setActiveTab('test')}
               className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
@@ -73,29 +78,7 @@ export default function AdminPage() {
               }`}
             >
               <TestTube className="h-4 w-4 mr-2 inline" />
-              Sync Test
-            </button>
-            <button
-              onClick={() => setActiveTab('database')}
-              className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
-                activeTab === 'database'
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <Database className="h-4 w-4 mr-2 inline" />
-              Database
-            </button>
-            <button
-              onClick={() => setActiveTab('sync')}
-              className={`px-6 py-3 rounded-md font-medium transition-all duration-300 ${
-                activeTab === 'sync'
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
-              }`}
-            >
-              <Activity className="h-4 w-4 mr-2 inline" />
-              Airtable Sync
+              Connection Test
             </button>
             <button
               onClick={() => setActiveTab('settings')}
@@ -112,27 +95,100 @@ export default function AdminPage() {
 
           {/* Tab Content */}
           <div className="space-y-6">
-            {activeTab === 'troubleshoot' && (
-              <div>
-                <AirtableSyncTroubleshooter />
-              </div>
-            )}
-
             {activeTab === 'test' && (
               <div>
-                <AirtableSyncTest />
-              </div>
-            )}
+                <Card className="bg-[#2a2a2a] border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-white">Airtable Connection Test</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Configuration Status */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 bg-[#1a1a1a] rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">API Key</span>
+                          <span className={`text-sm ${config.hasApiKey ? 'text-green-400' : 'text-red-400'}`}>
+                            {config.hasApiKey ? '✓ Configured' : '✗ Missing'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-[#1a1a1a] rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">Base ID</span>
+                          <span className="text-sm text-green-400">✓ {config.baseId}</span>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-[#1a1a1a] rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">Table ID</span>
+                          <span className="text-sm text-green-400">✓ {config.tableId}</span>
+                        </div>
+                      </div>
+                    </div>
 
-            {activeTab === 'database' && (
-              <div>
-                <DatabaseStatus />
-              </div>
-            )}
+                    {/* Test Button */}
+                    <div className="text-center">
+                      <Button
+                        onClick={handleTestConnection}
+                        disabled={isTestingConnection || !config.hasApiKey}
+                        className="bg-white text-black hover:bg-gray-100 disabled:opacity-50"
+                      >
+                        {isTestingConnection ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black mr-2"></div>
+                            Testing Connection...
+                          </>
+                        ) : (
+                          'Test Airtable Connection'
+                        )}
+                      </Button>
+                    </div>
 
-            {activeTab === 'sync' && (
-              <div>
-                <AirtableSyncDashboard />
+                    {/* Test Results */}
+                    {testResult && (
+                      <div className={`p-4 rounded-lg border ${
+                        testResult.success 
+                          ? 'bg-green-900/20 border-green-500' 
+                          : 'bg-red-900/20 border-red-500'
+                      }`}>
+                        <div className="flex items-center">
+                          {testResult.success ? (
+                            <CheckCircle className="h-5 w-5 text-green-400 mr-3" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-400 mr-3" />
+                          )}
+                          <div>
+                            <p className={`font-medium ${
+                              testResult.success ? 'text-green-300' : 'text-red-300'
+                            }`}>
+                              {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                            </p>
+                            <p className={`text-sm ${
+                              testResult.success ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {testResult.message}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Configuration Warning */}
+                    {!config.hasApiKey && (
+                      <div className="p-4 bg-yellow-900/20 border border-yellow-500 rounded-lg">
+                        <div className="flex items-center">
+                          <AlertCircle className="h-5 w-5 text-yellow-400 mr-3" />
+                          <div>
+                            <p className="text-yellow-300 font-medium">API Key Required</p>
+                            <p className="text-yellow-400 text-sm">
+                              Please set VITE_AIRTABLE_API_KEY in your environment variables to test the connection.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -149,30 +205,23 @@ export default function AdminPage() {
                         <h3 className="text-lg font-semibold text-white mb-4">Environment Variables</h3>
                         <div className="space-y-3">
                           <div className="flex justify-between items-center p-3 bg-[#1a1a1a] rounded-lg">
-                            <span className="text-gray-300">VITE_SUPABASE_URL</span>
-                            <span className={`text-sm ${import.meta.env.VITE_SUPABASE_URL ? 'text-green-400' : 'text-red-400'}`}>
-                              {import.meta.env.VITE_SUPABASE_URL ? '✓ Configured' : '✗ Missing'}
+                            <span className="text-gray-300">VITE_AIRTABLE_API_KEY</span>
+                            <span className={`text-sm ${config.hasApiKey ? 'text-green-400' : 'text-red-400'}`}>
+                              {config.hasApiKey ? '✓ Configured' : '✗ Missing'}
                             </span>
                           </div>
                           <div className="flex justify-between items-center p-3 bg-[#1a1a1a] rounded-lg">
-                            <span className="text-gray-300">VITE_SUPABASE_ANON_KEY</span>
-                            <span className={`text-sm ${import.meta.env.VITE_SUPABASE_ANON_KEY ? 'text-green-400' : 'text-red-400'}`}>
-                              {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✓ Configured' : '✗ Missing'}
-                            </span>
+                            <span className="text-gray-300">VITE_AIRTABLE_BASE_ID</span>
+                            <span className="text-sm text-green-400">✓ {config.baseId}</span>
                           </div>
-                          <div className="p-3 bg-[#1a1a1a] rounded-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-gray-300">AIRTABLE_API_KEY</span>
-                              <span className="text-sm text-yellow-400">Server-side only</span>
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              This environment variable is configured on the Supabase server and not visible in the client.
-                            </p>
+                          <div className="flex justify-between items-center p-3 bg-[#1a1a1a] rounded-lg">
+                            <span className="text-gray-300">VITE_AIRTABLE_TABLE_ID</span>
+                            <span className="text-sm text-green-400">✓ {config.tableId}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Sync Configuration */}
+                      {/* Airtable Configuration */}
                       <div>
                         <h3 className="text-lg font-semibold text-white mb-4">Airtable Configuration</h3>
                         <div className="space-y-3">
@@ -180,22 +229,36 @@ export default function AdminPage() {
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
                                 <span className="text-gray-400">Base ID:</span>
-                                <p className="text-white font-mono">appOjOMHTayU1oZLJ</p>
+                                <p className="text-white font-mono">{config.baseId}</p>
                               </div>
                               <div>
                                 <span className="text-gray-400">Table ID:</span>
-                                <p className="text-white font-mono">tblhpwqJMeAIETi1v</p>
+                                <p className="text-white font-mono">{config.tableId}</p>
                               </div>
                               <div>
-                                <span className="text-gray-400">View ID:</span>
-                                <p className="text-white font-mono">viwEO6AvLQ641myYg</p>
+                                <span className="text-gray-400">Integration Type:</span>
+                                <p className="text-white">Direct API Connection</p>
                               </div>
                               <div>
-                                <span className="text-gray-400">Sync Type:</span>
-                                <p className="text-white">Real-time + Scheduled</p>
+                                <span className="text-gray-400">Form Submission:</span>
+                                <p className="text-white">Real-time to Airtable</p>
                               </div>
                             </div>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Setup Instructions */}
+                      <div>
+                        <h3 className="text-lg font-semibold text-white mb-4">Setup Instructions</h3>
+                        <div className="p-4 bg-[#1a1a1a] rounded-lg">
+                          <ol className="list-decimal list-inside space-y-2 text-gray-300">
+                            <li>Create a personal access token in your Airtable account</li>
+                            <li>Grant the token access to the base: {config.baseId}</li>
+                            <li>Set the VITE_AIRTABLE_API_KEY environment variable</li>
+                            <li>Restart the development server</li>
+                            <li>Test the connection using the Connection Test tab</li>
+                          </ol>
                         </div>
                       </div>
 
@@ -204,15 +267,15 @@ export default function AdminPage() {
                         <h3 className="text-lg font-semibold text-white mb-4">System Status</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="p-4 bg-[#1a1a1a] rounded-lg">
-                            <h4 className="font-medium text-white mb-2">Database Connection</h4>
+                            <h4 className="font-medium text-white mb-2">Form Integration</h4>
                             <p className="text-sm text-gray-400">
-                              Real-time connection to Supabase database for contact submissions
+                              Direct submission to Airtable via REST API with real-time validation
                             </p>
                           </div>
                           <div className="p-4 bg-[#1a1a1a] rounded-lg">
-                            <h4 className="font-medium text-white mb-2">Edge Functions</h4>
+                            <h4 className="font-medium text-white mb-2">Data Processing</h4>
                             <p className="text-sm text-gray-400">
-                              Serverless functions for Airtable sync and data processing
+                              Client-side form validation and server-side data formatting
                             </p>
                           </div>
                         </div>
